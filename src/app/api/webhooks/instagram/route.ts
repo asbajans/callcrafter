@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
             startTime: new Date().toISOString(),
           },
         })
-        conversationId = newConversation.id
+        conversationId = newConversation.id as number
       } else {
         conversationId = existingConversations.docs[0].id as number
       }
