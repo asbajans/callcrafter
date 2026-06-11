@@ -54,29 +54,41 @@ jobs:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_STACK_NAME: ${{ secrets.PORTAINER_STACK_NAME }}
           DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
+          WS_DOCKER_IMAGE: ${{ env.WS_DOCKER_IMAGE }}
           DOCKER_TAG: ${{ steps.vars.outputs.sha_short }}
         run: |
-          ENDPOINT_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/endpoints" \
-            | jq -r '.[0].Id')
+          set -e
+          echo "--- Fetching endpoint ---"
+          ENDPOINT_ID=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/endpoints" | jq -r '.[0].Id')
+          echo "Endpoint: $ENDPOINT_ID"
 
-          STACK_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks" \
-            | jq -r --arg name "$PORTAINER_STACK_NAME" '.[] | select(.Name == $name) | .Id')
+          echo "--- Fetching stack ---"
+          STACK_INFO=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks" | jq -r --arg name "$PORTAINER_STACK_NAME" \
+            '.[] | select(.Name == $name)')
+          STACK_ID=$(echo "$STACK_INFO" | jq -r '.Id')
+          echo "Stack ID: $STACK_ID"
 
-          STACK_FILE=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID/file" \
-            | jq -r '.StackFileContent')
+          echo "--- Fetching stack file ---"
+          STACK_FILE_RESP=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks/$STACK_ID/file")
+          STACK_FILE=$(echo "$STACK_FILE_RESP" | jq -r '.StackFileContent')
+          STACK_ENV=$(echo "$STACK_FILE_RESP" | jq -c '.Env // []')
+          echo "Env vars preserved: $(echo "$STACK_ENV" | jq 'length')"
 
+          echo "--- Updating image tags ---"
           UPDATED_FILE=$(echo "$STACK_FILE" | sed \
             "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
              s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g")
 
-          curl -s -X PUT \
+          echo "--- Deploying to Portainer ---"
+          curl -sf -X PUT \
             -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
               --arg stackFileContent "$UPDATED_FILE" \
-              --arg envVars "[]" \
+              --argjson envVars "$STACK_ENV" \
               '{StackFileContent: $stackFileContent, Env: $envVars, Prune: true}')" \
             "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID"
+          echo "--- Deploy triggered successfully ---"
