@@ -1,39 +1,4 @@
 services:
-  traefik:
-    image: traefik:latest
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
-      - --certificatesresolvers.letsencrypt.acme.email=admin@callcrafter.com
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_data:/letsencrypt
-    labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.traefik.entrypoints=websecure'
-      - 'traefik.http.routers.traefik.rule=Host(`traefik.callcrafter.com.tr`)'
-      - 'traefik.http.routers.traefik.service=api@internal'
-      - 'traefik.http.routers.traefik.middlewares=traefik-auth'
-      - 'traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD}'
-    networks:
-      - callcrafter_network
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   postgres:
     image: postgres:16-alpine
     container_name: postgres
@@ -72,6 +37,8 @@ services:
     image: ${DOCKER_IMAGE:-asbajans/callcrafter}:${DOCKER_TAG:-latest}
     container_name: app
     restart: unless-stopped
+    ports:
+      - "3500:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,27 +51,20 @@ services:
       REDIS_URL: ${REDIS_URL}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       WS_SERVER_URL: http://ws-server:8080
-      WS_PUBLIC_URL: wss://callcrafter.com.tr/ws
-    labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.app.entrypoints=websecure'
-      - 'traefik.http.routers.app.rule=Host(`callcrafter.com.tr`) || Host(`www.callcrafter.com.tr`)'
-      - 'traefik.http.routers.app.tls=true'
-      - 'traefik.http.routers.app.tls.certresolver=letsencrypt'
-      - 'traefik.http.services.app.loadbalancer.server.port=3000'
+      WS_PUBLIC_URL: wss://ws.callcrafter.com.tr
     networks:
       - callcrafter_network
 
   ws-server:
     image: ${WS_DOCKER_IMAGE:-asbajans/callcrafter-ws}:${DOCKER_TAG:-latest}
     container_name: ws-server
+    restart: unless-stopped
     ports:
-      - "8080:8080"
-      - "9090:9090"
+      - "3501:8080"
     environment:
       WS_HTTP_PORT: 8080
-      WS_WS_PORT: 9090
-      WS_PUBLIC_URL: wss://callcrafter.com.tr/ws
+      WS_WS_PORT: 8080
+      WS_PUBLIC_URL: wss://ws.callcrafter.com.tr
       APP_API_URL: http://app:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -117,12 +77,10 @@ services:
       - redis
     networks:
       - callcrafter_network
-    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
-  traefik_data:
 
 networks:
   callcrafter_network:
