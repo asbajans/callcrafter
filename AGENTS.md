@@ -1,99 +1,66 @@
 # CallCrafter — AI-Powered Call Center SaaS
 
-## Architecture Overview
+## Architecture
 
 ```
-┌────────────────────────────────────────────────────┐
-│                   Cloudflare Tunnel                │
-│  callcrafter.com.tr → host:3500                    │
-│  ws.callcrafter.com.tr  → host:3501                │
-└────────┬───────────────────────────────┬───────────┘
-         │                               │
-┌────────▼────────┐          ┌──────────▼──────────┐
-│  App (Next.js)  │          │  WS-Server (Node)   │
-│  Port 3000       │          │  HTTP :8080         │
-│  Payload CMS     │◄────────►│  WS   :9090         │
-│  + PostgreSQL    │  HTTP    │  Twilio Media       │
-└────────┬────────┘          │  Streams Handler    │
-         │                   └─────────────────────┘
-┌────────▼────────┐
-│   PostgreSQL    │
-│   + Redis       │
-└─────────────────┘
+┌───────────────────────────────────────────────┐
+│              Cloudflare Tunnel                │
+│  callcrafter.com.tr → host:3500               │
+│  ws.callcrafter.com.tr  → host:3501           │
+└─────────────────────┬─────────────────────────┘
+                      │
+┌─────────────────────▼─────────────────────────┐
+│  Docker Host (single box)                     │
+│  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
+│  │  app:3000 │  │ws:8080   │  │postgres:5432│  │
+│  │ 3500→3000 │  │3501→8080 │  │ (internal)  │  │
+│  └──────────┘  └──────────┘  └────────────┘  │
+│  ┌──────────┐                                │
+│  │redis:6379│                                 │
+│  │(internal)│                                 │
+│  └──────────┘                                │
+└───────────────────────────────────────────────┘
 ```
+
+- **No Traefik** — Cloudflare Tunnel handles SSL termination + domain routing
+- **Single host port per service** — only 3500 (app) and 3501 (ws-server) exposed
+- **ws-server** serves both HTTP (Twilio webhooks) and WebSocket (media streams) on port 8080
 
 ### Stack
-- **Frontend**: Next.js 15 (App Router) + Tailwind 4 + next-intl (TR/EN)
+- **Frontend**: Next.js 15 (App Router, `output: 'standalone'`) + Tailwind 4 + next-intl (TR/EN)
 - **CMS**: Payload CMS 3 (PostgreSQL adapter, Lexical editor)
-- **Database**: PostgreSQL 17 (main data) + pgvector (vector embeddings, optional)
+- **Database**: PostgreSQL 16 (main data)
 - **Cache**: Redis 7
-- **Media Server**: Standalone ws-server (Express + `ws` library)
+- **Media Server**: Standalone ws-server (Express + `ws` library, HTTP+WS on single port)
 - **AI**: OpenAI (GPT-4o) / Anthropic (Claude 3.5) — swappable per agent
-- **TTS**: ElevenLabs (`ulaw_8000` format, Twilio-compatible, no conversion needed)
+- **TTS**: ElevenLabs (`ulaw_8000` format, Twilio-compatible)
 - **STT**: OpenAI Whisper
-- **Channels**: Twilio (voice), Zadarma (voice), WhatsApp (Business API), Instagram (Meta Graph API), Web Chat
+- **Channels**: Twilio (voice), Zadarma (voice), WhatsApp, Instagram, Web Chat
 - **Billing**: Stripe
-- **Deployment**: Docker + Portainer stack + GitHub Actions
+- **Deployment**: Docker + Portainer stack (no Traefik) + GitHub Actions
 
-## Project Structure
+## Services (Portainer Stack)
 
-```
-CallCrafter/
-├── src/
-│   ├── app/
-│   │   ├── (payload)/        # Payload CMS admin + REST API
-│   │   │   ├── admin/        # /admin (Payload admin panel)
-│   │   │   └── api/          # /api/* (Payload REST API)
-│   │   ├── api/              # Custom API routes (health, auth, calls, ai/process)
-│   │   │   ├── ai/process/   # POST /api/ai/process (called by ws-server)
-│   │   │   ├── auth/         # login, register
-│   │   │   ├── calls/        # call initiation
-│   │   │   ├── twilio/       # outbound TwiML
-│   │   │   └── webhooks/     # Stripe, Twilio status
-│   │   ├── [locale]/         # User-facing pages (TR/EN)
-│   │   │   ├── page.tsx      # Landing page
-│   │   │   ├── auth/         # Login, Register
-│   │   │   ├── dashboard/    # Overview, Agents, Phone, Trunk, Conversations, Training, Billing, Settings
-│   │   │   └── admin/        # Super Admin: Users, Payments, Providers, System
-│   │   └── lib/              # Shared utilities
-│   ├── ai/
-│   │   ├── orchestrator/     # AgentOrchestrator (OpenAI/Anthropic, tool calling)
-│   │   ├── stt/              # STTModule (Whisper)
-│   │   ├── tts/              # ElevenLabsTTS
-│   │   ├── rag/              # RAGPipeline (LangChain)
-│   │   └── tools/            # ToolRegistry
-│   ├── media/
-│   │   ├── adapters/         # TwilioAdapter, ZadarmaAdapter, AsteriskAdapter (stub)
-│   │   └── router/           # MediaRouter
-│   ├── channels/             # WhatsAppAdapter, InstagramAdapter, WebChatAdapter, UnifiedRouter
-│   ├── billing/              # StripeService
-│   └── payload/collections/  # 15 Payload collections
-├── ws-server/                # Standalone WebSocket media server
-│   └── src/
-│       ├── index.ts          # Express + WS server, initMediaStream
-│       ├── twilio-webhook.ts # TwiML response → Media Streams
-│       ├── websocket.ts      # WebSocket handler, session management, turn-taking
-│       ├── media-stream.ts   # STT → AI → TTS pipeline (Whisper → API → ElevenLabs)
-│       └── utils.ts          # Audio helpers (mulaw→WAV, silence detection)
-├── config/cloudflared/       # Cloudflare Tunnel config
-├── docker-compose.yml        # 6 services: traefik, postgres, redis, app, ws-server, pgvector
-├── Dockerfile                # Multi-stage app build
-└── .github/workflows/
-    ├── test.yml              # CI: typecheck + lint + build (app + ws-server)
-    └── deploy.yml            # CD: Docker build → push → Portainer API update
-```
+| Service   | Image                          | Host Port | Container Port |
+|-----------|--------------------------------|-----------|----------------|
+| postgres  | postgres:16-alpine             | —         | 5432           |
+| redis     | redis:7-alpine                 | —         | 6379           |
+| app       | asbajans/callcrafter           | 3500      | 3000           |
+| ws-server | asbajans/callcrafter-ws        | 3501      | 8080           |
+
+Internal ports (5432, 6379, internal Docker network) never conflict with host services.
 
 ## Key Data Flow
 
 ### Incoming Voice Call
 ```
-Twilio → POST /twilio/voice (ws-server HTTP :8080)
+Twilio → POST /twilio/voice (ws-server :8080)
        → TwiML with <Stream url="wss://.../?call={CallSid}">
-       → WebSocket connection (ws-server WS :9090)
+       → WebSocket connection (same :8080, WS attached to HTTP server)
        → Audio chunks (mulaw 8kHz, base64)
        → Buffer + silence detection
        → Whisper STT (transcript)
-       → POST /api/ai/process (main app :3000)
+       → POST /api/ai/process (app :3000, via INTERNAL_API_KEY)
          → Look up phone number → Agent → Voice → Training docs
          → AgentOrchestrator (GPT-4o / Claude)
          → Log conversation + messages
@@ -102,126 +69,167 @@ Twilio → POST /twilio/voice (ws-server HTTP :8080)
        → Stream audio chunks back to Twilio via WebSocket
 ```
 
-### Outbound Voice Call
+## Recent Fixes & Changes
+
+### Docker Build
+- `npm install --legacy-peer-deps` (Peer dependency conflict Payload ↔ Next.js)
+- `output: 'standalone'` in next.config.ts
+- `eslint.ignoreDuringBuilds: true` (ESLint 10 incompatible with next lint options)
+- Removed `COPY --from=builder /app/public ./public` (standalone output includes it)
+
+### CI/CD
+- ESLint pinned to v8.57.1 (`eslint-config-next` requires v8)
+- Lint step removed from test.yml (`next build` already validates)
+- Deploy workflow uses Docker Buildx → Docker Hub → Portainer API
+- Test workflow: `npm install --legacy-peer-deps` → `npm run typecheck` → `npm run build`
+
+### TypeScript
+- `newConversation.id as number` casts in 3 route files (Payload's `create` returns `string | number`)
+
+### Infrastructure
+- Traefik removed (Cloudflare Tunnel handles SSL + routing)
+- Host ports: 3500 → app:3000, 3501 → ws-server:8080
+- ws-server WS_WS_PORT=8080 (attached to HTTP server, not separate)
+- Container names: `ws-server` (consistent naming)
+- Postgres password: `postcall1212*`
+
+## Deployment Status (11 June 2026)
+- Build: ✅ `npm run build` passes (0 errors)
+- Test workflow: ✅ Passes (typecheck + build)
+- Deploy workflow: ✅ Passes (Docker → Docker Hub → Portainer)
+- Site: ✅ Live at `http://192.168.0.243:3500` (landing page in Turkish)
+- DNS: ⏳ `callcrafter.com.tr` + `ws.callcrafter.com.tr` propagation pending
+
+## Portainer Setup
+
+Stack content: `config/portainer-stack.yml`
+
+Environment variables to set in Portainer UI:
+
 ```
-Dashboard → POST /api/calls { agentId, phoneNumber, tenantId }
-          → POST /twilio/call (ws-server)
-          → Twilio REST API (create call)
-          → Same inbound flow after connection
+POSTGRES_DB=callcrafter_saas
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postcall1212*
+DATABASE_URI=postgresql://postgres:postcall1212*@postgres:5432/callcrafter_saas
+PAYLOAD_SECRET=<64 char random>
+REDIS_URL=redis://redis:6379
+INTERNAL_API_KEY=<shared secret>
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+ELEVENLABS_API_KEY=...
+ZADARMA_API_KEY=...
+ZADARMA_SECRET=...
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+```
+
+### GitHub Secrets
+| Secret                     | Description                          |
+|----------------------------|--------------------------------------|
+| `DOCKER_USERNAME`          | Docker Hub username (asbajans)       |
+| `DOCKER_PASSWORD`          | Docker Hub password/token            |
+| `PORTAINER_URL`            | Portainer URL                        |
+| `PORTAINER_API_KEY`        | Portainer API key                    |
+| `PORTAINER_STACK_NAME`     | callcrafter                          |
+
+### Cloudflare Tunnel Config
+```
+callcrafter.com.tr   → localhost:3500
+ws.callcrafter.com.tr → localhost:3501
+```
+
+## Project Structure
+
+```
+CallCrafter/
+├── src/
+│   ├── app/
+│   │   ├── (payload)/        # Payload CMS admin + REST API
+│   │   │   ├── admin/        # /admin
+│   │   │   └── api/          # /api/* (Payload REST)
+│   │   ├── api/              # Custom routes
+│   │   │   ├── ai/process/   # POST /api/ai/process
+│   │   │   ├── auth/         # login, register
+│   │   │   ├── calls/        # call initiation
+│   │   │   ├── twilio/       # outbound TwiML
+│   │   │   └── webhooks/     # Stripe, WhatsApp, Instagram, Zadarma
+│   │   ├── [locale]/         # User pages (TR/EN)
+│   │   │   ├── page.tsx      # Landing
+│   │   │   ├── auth/         # Login, Register
+│   │   │   ├── dashboard/    # Overview, Agents, Phone, Trunk, Conversations, Training, Billing, Settings
+│   │   │   └── admin/        # Super Admin: Users, Payments, Providers, System
+│   │   └── lib/              # Shared utilities (api.ts, auth.ts, i18n.ts, utils.ts)
+│   ├── ai/
+│   │   ├── orchestrator/     # AgentOrchestrator (OpenAI/Anthropic, tool calling)
+│   │   ├── stt/              # STTModule (Whisper)
+│   │   ├── tts/              # ElevenLabsTTS
+│   │   ├── rag/              # RAGPipeline (LangChain)
+│   │   └── tools/            # ToolRegistry
+│   ├── media/adapters/       # TwilioAdapter, ZadarmaAdapter, AsteriskAdapter (stub)
+│   ├── channels/             # WhatsAppAdapter, InstagramAdapter, WebChatAdapter, UnifiedRouter
+│   ├── billing/              # StripeService
+│   └── payload/collections/  # 15 collections
+├── ws-server/src/
+│   ├── index.ts              # Express + WS server (both on :8080)
+│   ├── twilio-webhook.ts     # TwiML → Media Streams
+│   ├── websocket.ts          # Session mgmt, silence detection, turn-taking
+│   ├── media-stream.ts       # STT→AI→TTS pipeline
+│   ├── zadarma-handler.ts    # Zadarma WS client + pipeline
+│   └── utils.ts              # Audio helpers
+├── config/
+│   └── portainer-stack.yml   # Production stack (no Traefik)
+├── Dockerfile                # Multi-stage (deps → builder → runner)
+├── docker-compose.yml        # Local dev (matches portainer-stack)
+└── .github/workflows/
+    ├── test.yml              # typecheck + build
+    └── deploy.yml            # Docker build → push → Portainer API
 ```
 
 ## Payload Collections (15)
 
 | Collection        | Slug              | Purpose                        |
 |-------------------|-------------------|--------------------------------|
-| Users             | users             | Auth + roles (super-admin, tenant-admin, user) |
+| Users             | users             | Auth + roles                   |
 | Tenants           | tenants           | Multi-tenant isolation         |
-| Agents            | agents            | AI agent config (prompt, voice, model, tools) |
-| VoiceConfigs      | voice-configs     | Voice database (ElevenLabs provider IDs) |
-| PhoneNumbers      | phone-numbers     | Phone numbers → agent mapping  |
-| ProviderConfigs   | provider-configs  | Twilio/Zadarma account configs |
+| Agents            | agents            | AI agent config                |
+| VoiceConfigs      | voice-configs     | Voice DB (ElevenLabs IDs)      |
+| PhoneNumbers      | phone-numbers     | Phone → agent mapping          |
+| ProviderConfigs   | provider-configs  | Twilio/Zadarma config          |
 | SipTrunks         | sip-trunks        | Bring-your-own SIP trunk       |
-| Conversations     | conversations     | Call/conversation records      |
-| Messages          | messages          | Per-message transcripts        |
+| Conversations     | conversations     | Call records                   |
+| Messages          | messages          | Transcripts                    |
 | TrainingDocs      | training-docs     | RAG training documents         |
 | PricingPlans      | pricing-plans     | Subscription tiers             |
 | Subscriptions     | subscriptions     | Tenant subscription status     |
-| Payments          | payments          | Stripe payment records         |
-| WebhookLogs       | webhook-logs      | All incoming webhooks          |
-| Media             | media             | File uploads (S3)              |
+| Payments          | payments          | Stripe records                 |
+| WebhookLogs       | webhook-logs      | Incoming webhooks              |
+| Media             | media             | File uploads                   |
 
 ## Conventions
 
 ### Code Style
-- **TypeScript**: strict mode, ES modules, no unused locals/parameters
-- **React**: `'use client'` for interactive pages, server components default
-- **CSS**: Tailwind 4 utility classes, no CSS modules
-- **No JSDoc comments** unless documenting public API
-- **No emoji in code** (only in console.log for dev visibility)
+- TypeScript strict mode, ES modules, no unused locals/parameters
+- `'use client'` for interactive pages, server components default
+- Tailwind 4, no CSS modules, no JSDoc comments, no emoji in code
 
 ### Next.js
-- Route groups: `(payload)` for Payload admin/API, `[locale]` for user pages
-- All user pages under `[locale]` use `useTranslations()` for i18n
-- API routes in `src/app/api/` are internal (not Payload)
-- Payload REST API at `/api/{collection}` inside `(payload)` group
-
-### Payload
-- Access control: tenant-scoped read/write; super-admin has full access
-- Depth: 2 for deep queries, 0 for shallow
-- Relationships: use `relationTo` field type
-- Timestamps: `timestamps: true` on Conversations
+- Route groups: `(payload)` for CMS, `[locale]` for user pages
+- User pages use `useTranslations()` for i18n
+- Custom API routes in `src/app/api/`
 
 ### ws-server
-- Standalone Node.js ESM project (separate package.json)
-- Communicates with main app via HTTP with `INTERNAL_API_KEY`
-- No Payload dependency — lightweight, real-time focus
+- HTTP + WebSocket on same port (8080), WS attached to HTTP server
+- Communicates with app via HTTP with `INTERNAL_API_KEY`
 - Twilio audio: mulaw 8kHz, 20ms chunks (160 bytes)
-- ElevenLabs TTS: `output_format: 'ulaw_8000'` for direct Twilio compatibility
-
-### Media Adapter Pattern
-```typescript
-interface MediaAdapter {
-  initiateCall(params: CallParams): Promise<CallResult>
-  endCall(callSid: string): Promise<void>
-  getCallStatus(callSid: string): Promise<CallStatus>
-  getStreamUrl?(callSid: string): string  // optional, for WS streaming
-}
-```
-Adapters: TwilioAdapter (complete), ZadarmaAdapter (partial), AsteriskAdapter (stub).
-
-## Environment Variables
-
-See `.env.example` (dev) and `.env.production.example` (prod).
-
-Key variables:
-- `INTERNAL_API_KEY` — shared secret between app and ws-server
-- `OPENAI_API_KEY` — Whisper STT + GPT models
-- `ANTHROPIC_API_KEY` — Claude models
-- `ELEVENLABS_API_KEY` — TTS
-- `TWILIO_*` — Voice provider
-- `STRIPE_*` — Billing
-
-## Deployment
-
-### GitHub Secrets Required
-| Secret                     | Description                          |
-|----------------------------|--------------------------------------|
-| `DOCKER_USERNAME`          | Docker Hub username                  |
-| `DOCKER_PASSWORD`          | Docker Hub password/token            |
-| `PORTAINER_URL`            | https://portainer.your-server.com    |
-| `PORTAINER_API_KEY`        | Portainer API key                    |
-| `PORTAINER_STACK_NAME`     | Stack name in Portainer              |
-
-### Portainer Stack
-The deploy workflow does NOT use `docker-compose.yml` directly. Instead:
-1. Create a stack manually in Portainer (similar to docker-compose.yml)
-2. Use image tags from Docker Hub (e.g., `youruser/callcrafter:latest`)
-3. Workflow updates image tags via Portainer API
-
-### One-Time Setup
-```bash
-# 1. Cloudflare Tunnel
-ssh user@server
-cloudflared tunnel create callcrafter
-cloudflared tunnel route dns callcrafter callcrafter.com.tr
-cloudflared tunnel route dns callcrafter ws.callcrafter.com.tr
-
-# 2. Portainer stack
-# Create stack with docker-compose content, set env vars
-
-# 3. GitHub Secrets
-# Add all secrets listed above to GitHub repo
-```
+- ElevenLabs TTS: `output_format: 'ulaw_8000'`
 
 ## Testing
 ```bash
-npm run typecheck    # Main app TypeScript check
-npm run lint         # Next.js lint
-npm run build        # Production build
-cd ws-server && npx tsc --noEmit  # ws-server type check
+npm run typecheck              # App TS check
+npm run build                  # Production build
+cd ws-server && npx tsc --noEmit  # ws-server TS check
 ```
 
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
-- 4 Pricing Plans: Free ($0), Starter ($49), Professional ($149), Enterprise ($499)
-- 5 Default Voices: Ahmet, Rachel, Domi, Bella, Antoni
+- 4 Pricing Plans, 5 Default Voices
