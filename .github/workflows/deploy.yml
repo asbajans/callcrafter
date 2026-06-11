@@ -1,0 +1,82 @@
+name: Deploy to Portainer
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/callcrafter
+  WS_DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/callcrafter-ws
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:latest
+            ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+
+      - name: Build and push ws-server Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ws-server
+          push: true
+          tags: |
+            ${{ env.WS_DOCKER_IMAGE }}:latest
+            ${{ env.WS_DOCKER_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+
+      - name: Deploy to Portainer
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_STACK_NAME: ${{ secrets.PORTAINER_STACK_NAME }}
+          DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
+          DOCKER_TAG: ${{ steps.vars.outputs.sha_short }}
+        run: |
+          ENDPOINT_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/endpoints" \
+            | jq -r '.[0].Id')
+
+          STACK_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks" \
+            | jq -r --arg name "$PORTAINER_STACK_NAME" '.[] | select(.Name == $name) | .Id')
+
+          STACK_FILE=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks/$STACK_ID/file" \
+            | jq -r '.StackFileContent')
+
+          UPDATED_FILE=$(echo "$STACK_FILE" | sed \
+            "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
+             s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g")
+
+          curl -s -X PUT \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg stackFileContent "$UPDATED_FILE" \
+              --arg envVars "[]" \
+              '{StackFileContent: $stackFileContent, Env: $envVars, Prune: true}')" \
+            "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID"

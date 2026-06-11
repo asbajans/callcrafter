@@ -1,0 +1,72 @@
+{
+  "auth": {
+    "login": "Giriş Yap",
+    "register": "Kayıt Ol",
+    "email": "E-posta",
+    "password": "Şifre",
+    "loginButton": "Giriş Yap",
+    "registerButton": "Kayıt Ol",
+    "logout": "Çıkış Yap",
+    "noAccount": "Hesabınız yok mu?",
+    "hasAccount": "Zaten hesabınız var mı?",
+    "forgotPassword": "Şifremi Unuttum"
+  },
+  "dashboard": {
+    "title": "Panel",
+    "overview": "Genel Bakış",
+    "agents": "AI Asistanlar",
+    "phone": "Telefon Numaraları",
+    "trunk": "SIP Bağlantıları",
+    "training": "Eğitim Dokümanları",
+    "conversations": "Konuşmalar",
+    "billing": "Faturalandırma",
+    "settings": "Ayarlar"
+  },
+  "admin": {
+    "title": "Süper Admin",
+    "users": "Kullanıcılar",
+    "agents": "Asistanlar",
+    "payments": "Ödemeler",
+    "providers": "Servis Sağlayıcılar",
+    "system": "Sistem Ayarları",
+    "dashboard": "Admin Paneli"
+  },
+  "agent": {
+    "create": "Yeni Asistan Oluştur",
+    "edit": "Asistanı Düzenle",
+    "name": "Asistan Adı",
+    "description": "Açıklama",
+    "voice": "Ses",
+    "language": "Dil",
+    "model": "Model",
+    "systemPrompt": "Sistem Talimatı",
+    "trainingDocs": "Eğitim Dokümanları",
+    "channels": "Kanallar",
+    "status": "Durum",
+    "save": "Kaydet",
+    "delete": "Sil",
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "testing": "Test"
+  },
+  "phone": {
+    "title": "Telefon Numaraları",
+    "addNumber": "Numara Ekle",
+    "ownNumber": "Kendi Numaram",
+    "providerNumber": "Servis Sağlayıcı Numarası",
+    "forwardTo": "Yönlendirilecek Asistan",
+    "sipTrunk": "SIP Bağlantısı"
+  },
+  "common": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "create": "Oluştur",
+    "search": "Ara",
+    "loading": "Yükleniyor...",
+    "error": "Hata",
+    "success": "Başarılı",
+    "noData": "Veri bulunamadı"
+  }
+}

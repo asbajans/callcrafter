@@ -1,0 +1,72 @@
+{
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "loginButton": "Sign In",
+    "registerButton": "Sign Up",
+    "logout": "Logout",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "forgotPassword": "Forgot Password"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "overview": "Overview",
+    "agents": "AI Agents",
+    "phone": "Phone Numbers",
+    "trunk": "SIP Trunks",
+    "training": "Training Documents",
+    "conversations": "Conversations",
+    "billing": "Billing",
+    "settings": "Settings"
+  },
+  "admin": {
+    "title": "Super Admin",
+    "users": "Users",
+    "agents": "Agents",
+    "payments": "Payments",
+    "providers": "Providers",
+    "system": "System Settings",
+    "dashboard": "Admin Dashboard"
+  },
+  "agent": {
+    "create": "Create New Agent",
+    "edit": "Edit Agent",
+    "name": "Agent Name",
+    "description": "Description",
+    "voice": "Voice",
+    "language": "Language",
+    "model": "Model",
+    "systemPrompt": "System Prompt",
+    "trainingDocs": "Training Documents",
+    "channels": "Channels",
+    "status": "Status",
+    "save": "Save",
+    "delete": "Delete",
+    "active": "Active",
+    "inactive": "Inactive",
+    "testing": "Testing"
+  },
+  "phone": {
+    "title": "Phone Numbers",
+    "addNumber": "Add Number",
+    "ownNumber": "My Own Number",
+    "providerNumber": "Provider Number",
+    "forwardTo": "Forward To Agent",
+    "sipTrunk": "SIP Trunk"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "noData": "No data found"
+  }
+}

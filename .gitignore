@@ -1,0 +1,15 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+*.local
+.env.local
+.env.production
+*.tsbuildinfo
+.next-env.d.ts
+payload-types.ts
+/tmp/
+temp/
+.DS_Store
+*.log
