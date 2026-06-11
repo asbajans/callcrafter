@@ -14,18 +14,18 @@ services:
       - --certificatesresolvers.letsencrypt.acme.email=admin@callcrafter.com
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_data:/letsencrypt
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.callcrafter.com.tr`)"
-      - "traefik.http.routers.traefik.service=api@internal"
-      - "traefik.http.routers.traefik.middlewares=traefik-auth"
-      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD}"
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.traefik.entrypoints=websecure'
+      - 'traefik.http.routers.traefik.rule=Host(`traefik.callcrafter.com.tr`)'
+      - 'traefik.http.routers.traefik.service=api@internal'
+      - 'traefik.http.routers.traefik.middlewares=traefik-auth'
+      - 'traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD}'
     networks:
       - callcrafter_network
     healthcheck:
@@ -86,18 +86,18 @@ services:
       WS_SERVER_URL: http://ws-server:8080
       WS_PUBLIC_URL: wss://callcrafter.com.tr/ws
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.app.entrypoints=websecure"
-      - "traefik.http.routers.app.rule=Host(`callcrafter.com.tr`) || Host(`www.callcrafter.com.tr`)"
-      - "traefik.http.routers.app.tls=true"
-      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
-      - "traefik.http.services.app.loadbalancer.server.port=3000"
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.app.entrypoints=websecure'
+      - 'traefik.http.routers.app.rule=Host(`callcrafter.com.tr`) || Host(`www.callcrafter.com.tr`)'
+      - 'traefik.http.routers.app.tls=true'
+      - 'traefik.http.routers.app.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.app.loadbalancer.server.port=3000'
     networks:
       - callcrafter_network
 
   ws-server:
     image: ${WS_DOCKER_IMAGE:-asbajans/callcrafter-ws}:${DOCKER_TAG:-latest}
-    container_name: callcrafter_ws
+    container_name: ws-server
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -109,6 +109,8 @@ services:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      ZADARMA_API_KEY: ${ZADARMA_API_KEY}
+      ZADARMA_SECRET: ${ZADARMA_SECRET}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
     depends_on:
