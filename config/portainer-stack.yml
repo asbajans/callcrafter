@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   traefik:
     image: traefik:latest
@@ -71,7 +69,7 @@ services:
       retries: 5
 
   app:
-    image: ${DOCKER_IMAGE:-your-registry/callcrafter}:${DOCKER_TAG:-latest}
+    image: ${DOCKER_IMAGE:-asbajans/callcrafter}:${DOCKER_TAG:-latest}
     container_name: app
     restart: unless-stopped
     depends_on:
@@ -79,12 +77,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
     environment:
       NODE_ENV: production
       DATABASE_URI: ${DATABASE_URI}
       PAYLOAD_SECRET: ${PAYLOAD_SECRET}
       REDIS_URL: ${REDIS_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       WS_SERVER_URL: http://ws-server:8080
       WS_PUBLIC_URL: wss://callcrafter.com/ws
     labels:
@@ -98,7 +96,7 @@ services:
       - callcrafter_network
 
   ws-server:
-    image: ${WS_DOCKER_IMAGE:-your-registry/callcrafter-ws}:${DOCKER_TAG:-latest}
+    image: ${WS_DOCKER_IMAGE:-asbajans/callcrafter-ws}:${DOCKER_TAG:-latest}
     container_name: callcrafter_ws
     ports:
       - "8080:8080"
@@ -107,6 +105,8 @@ services:
       WS_HTTP_PORT: 8080
       WS_WS_PORT: 9090
       WS_PUBLIC_URL: wss://callcrafter.com/ws
+      APP_API_URL: http://app:3000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
@@ -117,31 +117,9 @@ services:
       - callcrafter_network
     restart: unless-stopped
 
-  pgvector:
-    image: pgvector/pgvector:pg16
-    container_name: pgvector
-    restart: unless-stopped
-    profiles:
-      - vector
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-callcrafter}
-      POSTGRES_USER: ${POSTGRES_USER:-callcrafter}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - pgvector_data:/var/lib/postgresql/data
-    networks:
-      - callcrafter_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-callcrafter} -d ${POSTGRES_DB:-callcrafter}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
 volumes:
   postgres_data:
   redis_data:
-  pgvector_data:
   traefik_data:
 
 networks:
