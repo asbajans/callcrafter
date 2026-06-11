@@ -10,17 +10,28 @@ const intlMiddleware = createMiddleware({
   localePrefix: 'as-needed',
 });
 
-const protectedPaths = ['/dashboard', '/admin'];
+const payloadPaths = ['/admin', '/api'];
 
 export default function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Skip intl middleware for Payload CMS routes (admin + API)
+  for (const prefix of payloadPaths) {
+    if (pathname === prefix || pathname.startsWith(prefix + '/')) {
+      return NextResponse.next();
+    }
+  }
+
+  const protectedPaths = ['/dashboard'];
 
   const isProtected = protectedPaths.some(
     (path) => pathname.startsWith(`/${path}`) || pathname.match(`^/[a-z]{2}${path}`)
   );
 
   if (isProtected) {
-    const token = request.cookies.get('token')?.value || request.headers.get('authorization');
+    // TODO: Implement proper auth check (Payload JWT)
+    // For now, redirect to login if no authorization cookie
+    const token = request.cookies.get('payload-token')?.value;
 
     if (!token) {
       const locale = request.cookies.get('NEXT_LOCALE')?.value || defaultLocale;
@@ -28,19 +39,11 @@ export default function middleware(request: NextRequest) {
       loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
-
-    // TODO: Verify JWT token with Payload CMS
-    // try {
-    //   const payload = await jwtVerify(token, secretKey);
-    //   request.headers.set('x-user-id', payload.userId);
-    // } catch {
-    //   return NextResponse.redirect(loginUrl);
-    // }
   }
 
   return intlMiddleware(request);
 }
 
 export const config = {
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)'],
+  matcher: ['/((?!_next|_vercel|.*\\..*).*)'],
 };
