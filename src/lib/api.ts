@@ -1,5 +1,3 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -22,7 +20,7 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+  const res = await fetch(endpoint, {
     ...options,
     headers,
   });
