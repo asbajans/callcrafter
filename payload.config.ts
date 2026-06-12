@@ -4,23 +4,21 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import {
-  Users,
-  Tenants,
-  Agents,
-  VoiceConfigs,
-  PhoneNumbers,
-  ProviderConfigs,
-  SipTrunks,
-  Conversations,
-  Messages,
-  TrainingDocs,
-  PricingPlans,
-  Subscriptions,
-  Payments,
-  WebhookLogs,
-  Media,
-} from '@/payload/collections/index'
+import { Users } from './src/payload/collections/Users'
+import { Tenants } from './src/payload/collections/Tenants'
+import { Agents } from './src/payload/collections/Agents'
+import { VoiceConfigs } from './src/payload/collections/VoiceConfigs'
+import { PhoneNumbers } from './src/payload/collections/PhoneNumbers'
+import { ProviderConfigs } from './src/payload/collections/ProviderConfigs'
+import { SipTrunks } from './src/payload/collections/SipTrunks'
+import { Conversations } from './src/payload/collections/Conversations'
+import { Messages } from './src/payload/collections/Messages'
+import { TrainingDocs } from './src/payload/collections/TrainingDocs'
+import { PricingPlans } from './src/payload/collections/PricingPlans'
+import { Subscriptions } from './src/payload/collections/Subscriptions'
+import { Payments } from './src/payload/collections/Payments'
+import { WebhookLogs } from './src/payload/collections/WebhookLogs'
+import { Media } from './src/payload/collections/Media'
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
