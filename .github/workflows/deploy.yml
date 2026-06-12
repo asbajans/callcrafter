@@ -82,24 +82,15 @@ jobs:
           CURRENT_ENV=$(echo "$STACK_DETAIL" | jq -c '.Env // []')
           echo "Current env vars: $(echo "$CURRENT_ENV" | jq 'length')"
 
-          echo "--- Updating DOCKER_TAG env var ---"
-          UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
+          echo "--- Setting DOCKER_TAG=$DOCKER_TAG ---"
+          REDEPLOY_ENV=$(echo "$CURRENT_ENV" | jq \
             --arg tag "$DOCKER_TAG" \
             'map(if .name == "DOCKER_TAG" then .value = $tag else . end) + if any(.name == "DOCKER_TAG") then [] else [{"name":"DOCKER_TAG","value":$tag}] end')
-          echo "Env after update: $(echo "$UPDATED_ENV" | jq -r 'map("\(.name)=\(.value)") | .[]')"
-
-          echo "--- Saving env vars to stack ---"
-          curl -sf -X PUT \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --argjson env "$UPDATED_ENV" '{Env: $env}')" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" || { echo "ERROR: Failed to update env vars" >&2; exit 1; }
-          echo "--- Env vars saved ---"
 
           echo "--- Redeploying from repository ---"
           curl -sf -X POST \
             -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"Prune": true}' \
+            -d "$(jq -n --argjson env "$REDEPLOY_ENV" '{Env: $env, Prune: true}')" \
             "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || { echo "ERROR: Redeploy failed" >&2; exit 1; }
           echo "--- Redeploy triggered successfully ---"
