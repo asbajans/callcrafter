@@ -4,15 +4,15 @@ services:
     container_name: postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-callcrafter_saas}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - callcrafter_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d callcrafter_saas"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,13 +46,24 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URI: ${DATABASE_URI:-postgresql://postgres:postcall1212*@postgres:5432/callcrafter_saas}
-      NEXT_PUBLIC_BASE_URL: https://callcrafter.com.tr
+      DATABASE_URI: ${DATABASE_URI}
       PAYLOAD_SECRET: ${PAYLOAD_SECRET}
       REDIS_URL: ${REDIS_URL}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      WS_SERVER_URL: http://ws-server:8080
-      WS_PUBLIC_URL: wss://ws.callcrafter.com.tr
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
+      WS_SERVER_URL: ${WS_SERVER_URL}
+      WS_PUBLIC_URL: ${WS_PUBLIC_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      ZADARMA_API_KEY: ${ZADARMA_API_KEY}
+      ZADARMA_SECRET: ${ZADARMA_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      INSTAGRAM_IG_USER_ID: ${INSTAGRAM_IG_USER_ID}
     networks:
       - callcrafter_network
 
@@ -65,7 +76,7 @@ services:
     environment:
       WS_HTTP_PORT: 8080
       WS_WS_PORT: 8080
-      WS_PUBLIC_URL: wss://ws.callcrafter.com.tr
+      WS_PUBLIC_URL: ${WS_PUBLIC_URL}
       APP_API_URL: http://app:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
