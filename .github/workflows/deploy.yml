@@ -58,39 +58,77 @@ jobs:
           DOCKER_TAG: ${{ steps.vars.outputs.sha_short }}
         run: |
           set -e
+
+          # --- Helpers ---
+          portainer_get() {
+            curl -sf -H "X-API-Key: $PORTAINER_API_KEY" "$@"
+          }
+          portainer_put() {
+            curl -sf -X PUT -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" "$@"
+          }
+          portainer_post() {
+            curl -sf -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" "$@"
+          }
+
+          # --- Find endpoint ---
           echo "--- Fetching endpoint ---"
-          ENDPOINT_ID=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/endpoints" | jq -r '.[] | select(.Type == 1) | .Id' | head -1)
+          ENDPOINT_ID=$(portainer_get "$PORTAINER_URL/api/endpoints" | jq -r '.[] | select(.Type == 1) | .Id' | head -1)
           if [ -z "$ENDPOINT_ID" ] || [ "$ENDPOINT_ID" = "null" ]; then
             echo "ERROR: No valid endpoint found" >&2; exit 1
           fi
           echo "Endpoint: $ENDPOINT_ID"
 
+          # --- Find stack ---
           echo "--- Fetching stack ---"
-          STACK_INFO=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks") || { echo "ERROR: Failed to fetch stacks" >&2; exit 1; }
-          STACK_ID=$(echo "$STACK_INFO" | jq -r --arg name "$PORTAINER_STACK_NAME" \
-            '.[] | select(.Name == $name) | .Id')
+          STACK_ID=$(portainer_get "$PORTAINER_URL/api/stacks" | \
+            jq -r --arg name "$PORTAINER_STACK_NAME" '.[] | select(.Name == $name) | .Id')
           if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
             echo "ERROR: Stack '$PORTAINER_STACK_NAME' not found" >&2; exit 1
           fi
           echo "Stack ID: $STACK_ID"
 
-          echo "--- Fetching current env vars ---"
-          STACK_DETAIL=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID") || { echo "ERROR: Failed to fetch stack" >&2; exit 1; }
+          # --- Fetch full stack detail ---
+          echo "--- Fetching stack detail ---"
+          STACK_DETAIL=$(portainer_get "$PORTAINER_URL/api/stacks/$STACK_ID") || \
+            { echo "ERROR: Failed to fetch stack" >&2; exit 1; }
           CURRENT_ENV=$(echo "$STACK_DETAIL" | jq -c '.Env // []')
-          echo "Current env vars: $(echo "$CURRENT_ENV" | jq 'length')"
+          HAS_GIT=$(echo "$STACK_DETAIL" | jq 'has("GitConfig") and .GitConfig != null')
+          echo "Env vars: $(echo "$CURRENT_ENV" | jq 'length'), Has GitConfig: $HAS_GIT"
 
-          echo "--- Setting DOCKER_TAG=$DOCKER_TAG ---"
-          REDEPLOY_ENV=$(echo "$CURRENT_ENV" | jq \
+          # --- Build updated env vars with DOCKER_TAG ---
+          UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
             --arg tag "$DOCKER_TAG" \
             'map(if .name == "DOCKER_TAG" then .value = $tag else . end) + if any(.name == "DOCKER_TAG") then [] else [{"name":"DOCKER_TAG","value":$tag}] end')
 
-          echo "--- Redeploying from repository ---"
-          curl -sf -X POST \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --argjson env "$REDEPLOY_ENV" '{Env: $env, Prune: true}')" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || { echo "ERROR: Redeploy failed" >&2; exit 1; }
-          echo "--- Redeploy triggered successfully ---"
+          # --- Deploy based on mode ---
+          if [ "$HAS_GIT" = "true" ]; then
+            echo "--- Repository mode: redeploying from git ---"
+            portainer_post \
+              -d "$(jq -n --argjson env "$UPDATED_ENV" '{Env: $env, Prune: true}')" \
+              "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || \
+              { echo "ERROR: Git redeploy failed" >&2; exit 1; }
+            echo "--- Redeploy triggered ---"
+          else
+            echo "--- Web Editor mode: restoring git config + redeploying ---"
+            # Restore GitConfig (stack was accidentally converted by earlier API calls)
+            GIT_CONFIG='{
+              "URL": "https://github.com/asbajans/callcrafter.git",
+              "ReferenceName": "refs/heads/master",
+              "ConfigFilePath": "config/portainer-stack.yml"
+            }'
+            portainer_put \
+              -d "$(jq -n \
+                --argjson env "$UPDATED_ENV" \
+                --argjson git "$GIT_CONFIG" \
+                '{Env: $env, GitConfig: $git, Prune: true}')" \
+              "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" || \
+              { echo "ERROR: Failed to restore git config" >&2; exit 1; }
+            echo "--- Git config restored ---"
+
+            # Now redeploy from git
+            portainer_post \
+              -d "$(jq -n --argjson env "$UPDATED_ENV" '{Env: $env, Prune: true}')" \
+              "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || \
+              { echo "ERROR: Git redeploy failed" >&2; exit 1; }
+            echo "--- Redeploy triggered ---"
+          fi
