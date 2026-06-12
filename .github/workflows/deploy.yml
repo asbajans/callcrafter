@@ -109,26 +109,20 @@ jobs:
               { echo "ERROR: Git redeploy failed" >&2; exit 1; }
             echo "--- Redeploy triggered ---"
           else
-            echo "--- Web Editor mode: restoring git config + redeploying ---"
-            # Restore GitConfig (stack was accidentally converted by earlier API calls)
-            GIT_CONFIG='{
-              "URL": "https://github.com/asbajans/callcrafter.git",
-              "ReferenceName": "refs/heads/master",
-              "ConfigFilePath": "config/portainer-stack.yml"
-            }'
+            echo "--- Web Editor mode: updating stack file ---"
+            STACK_FILE_RESP=$(portainer_get "$PORTAINER_URL/api/stacks/$STACK_ID/file") || \
+              { echo "ERROR: Failed to fetch stack file" >&2; exit 1; }
+            STACK_FILE=$(echo "$STACK_FILE_RESP" | jq -r '.StackFileContent')
+            echo "Updating image tags to $DOCKER_TAG..."
+            UPDATED_FILE=$(echo "$STACK_FILE" | sed \
+              "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
+               s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g")
             portainer_put \
               -d "$(jq -n \
+                --arg stackFileContent "$UPDATED_FILE" \
                 --argjson env "$UPDATED_ENV" \
-                --argjson git "$GIT_CONFIG" \
-                '{Env: $env, GitConfig: $git, Prune: true}')" \
+                '{StackFileContent: $stackFileContent, Env: $env, Prune: true}')" \
               "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" || \
-              { echo "ERROR: Failed to restore git config" >&2; exit 1; }
-            echo "--- Git config restored ---"
-
-            # Now redeploy from git
-            portainer_post \
-              -d "$(jq -n --argjson env "$UPDATED_ENV" '{Env: $env, Prune: true}')" \
-              "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || \
-              { echo "ERROR: Git redeploy failed" >&2; exit 1; }
-            echo "--- Redeploy triggered ---"
+              { echo "ERROR: Failed to update stack" >&2; exit 1; }
+            echo "--- Stack updated and redeployed ---"
           fi
