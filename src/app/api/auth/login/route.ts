@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getPayload } from 'payload';
+import config from '../../../../../payload.config';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -19,34 +21,44 @@ export async function POST(request: Request) {
     }
 
     const { email, password } = parsed.data;
+    const payload = await getPayload({ config });
 
-    // TODO: Replace with Payload CMS authentication
-    // const user = await payload.login({
-    //   collection: 'users',
-    //   data: { email, password },
-    // });
+    const result = await payload.login({
+      collection: 'users',
+      data: { email, password },
+    });
 
-    // Mock authentication for development
-    if (email === 'admin@callcrafter.com' && password === 'password123') {
-      return NextResponse.json({
-        token: 'mock-jwt-token',
-        user: {
-          id: '1',
-          email: 'admin@callcrafter.com',
-          name: 'Admin User',
-        },
-      });
+    if (!result.token || !result.user) {
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
     }
 
-    return NextResponse.json(
-      { error: 'Invalid email or password' },
-      { status: 401 }
-    );
+    const response = NextResponse.json({
+      token: result.token,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        name: `${result.user.firstName || ''} ${result.user.lastName || ''}`.trim() || result.user.email,
+        role: result.user.role,
+      },
+    });
+
+    response.cookies.set('payload-token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: 'Invalid email or password' },
+      { status: 401 }
     );
   }
 }

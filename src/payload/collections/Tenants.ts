@@ -100,7 +100,7 @@ export const Tenants: CollectionConfig = {
       return false
     },
     create: ({ req: { user } }) => {
-      if (!user) return false
+      if (!user) return true
       return ['admin', 'super-admin'].includes(user.role as string)
     },
     update: ({ req: { user } }) => {

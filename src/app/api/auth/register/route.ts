@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getPayload } from 'payload';
+import config from '../../../../../payload.config';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -21,33 +23,41 @@ export async function POST(request: Request) {
     }
 
     const { name, email, password, tenantName } = parsed.data;
+    const nameParts = name.trim().split(/\s+/);
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || firstName;
 
-    // TODO: Replace with Payload CMS registration
-    // const user = await payload.create({
-    //   collection: 'users',
-    //   data: { name, email, password },
-    // });
-    // const tenant = await payload.create({
-    //   collection: 'tenants',
-    //   data: { name: tenantName, owner: user.id },
-    // });
+    const payload = await getPayload({ config });
 
-    // Mock registration
-    console.log('Registration:', { name, email, password, tenantName });
+    const user = await payload.create({
+      collection: 'users',
+      data: { email, password, firstName, lastName, role: 'tenant-admin', status: 'active' },
+    });
+
+    const tenant = await payload.create({
+      collection: 'tenants',
+      data: { name: tenantName, email, status: 'trial' },
+    });
+
+    await payload.update({
+      collection: 'users',
+      id: user.id,
+      data: { tenant: tenant.id },
+    });
 
     return NextResponse.json(
       {
         message: 'User registered successfully',
-        user: { id: 'new-user-id', name, email },
-        tenant: { id: 'new-tenant-id', name: tenantName },
+        user: { id: user.id, email, name },
+        tenant: { id: tenant.id, name: tenantName },
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Registration error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    const message = error?.message?.includes('duplicate')
+      ? 'This email or company name is already registered'
+      : error?.message || 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
