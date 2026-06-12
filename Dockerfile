@@ -20,7 +20,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy CLI tools + config for startup migration
-COPY --from=builder /app/node_modules/.bin/payload /app/node_modules/.bin/payload
 COPY --from=builder /app/node_modules/payload /app/node_modules/payload
 COPY --from=builder /app/node_modules/tsx /app/node_modules/tsx
 COPY --from=builder /app/node_modules/typescript /app/node_modules/typescript
