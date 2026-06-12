@@ -20,7 +20,8 @@ import {
   Payments,
   WebhookLogs,
   Media,
-} from '@/payload/collections/index';
+} from '@/payload/collections/index'
+import { migrations } from '@/migrations/index'
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -31,6 +32,7 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
     },
+    push: true,
   }),
   collections: [
     Users,
@@ -49,6 +51,7 @@ export default buildConfig({
     WebhookLogs,
     Media,
   ],
+  migrations,
   admin: {
     user: Users.slug,
     meta: {
