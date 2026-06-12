@@ -25,7 +25,7 @@ export default function middleware(request: NextRequest) {
   const protectedPaths = ['/dashboard'];
 
   const isProtected = protectedPaths.some(
-    (path) => pathname.startsWith(`/${path}`) || pathname.match(`^/[a-z]{2}${path}`)
+    (path) => pathname === path || pathname.startsWith(path + '/') || pathname.match(new RegExp(`^/[a-z]{2}${path}(/.*)?$`))
   );
 
   if (isProtected) {

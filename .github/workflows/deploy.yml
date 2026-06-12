@@ -60,35 +60,41 @@ jobs:
           set -e
           echo "--- Fetching endpoint ---"
           ENDPOINT_ID=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/endpoints" | jq -r '.[0].Id')
+            "$PORTAINER_URL/api/endpoints" | jq -r '.[] | select(.Type == 1) | .Id' | head -1)
+          if [ -z "$ENDPOINT_ID" ] || [ "$ENDPOINT_ID" = "null" ]; then
+            echo "ERROR: No valid endpoint found" >&2; exit 1
+          fi
           echo "Endpoint: $ENDPOINT_ID"
 
           echo "--- Fetching stack ---"
           STACK_INFO=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks" | jq -r --arg name "$PORTAINER_STACK_NAME" \
-            '.[] | select(.Name == $name)')
-          STACK_ID=$(echo "$STACK_INFO" | jq -r '.Id')
+            "$PORTAINER_URL/api/stacks") || { echo "ERROR: Failed to fetch stacks" >&2; exit 1; }
+          STACK_ID=$(echo "$STACK_INFO" | jq -r --arg name "$PORTAINER_STACK_NAME" \
+            '.[] | select(.Name == $name) | .Id')
+          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
+            echo "ERROR: Stack '$PORTAINER_STACK_NAME' not found" >&2; exit 1
+          fi
           echo "Stack ID: $STACK_ID"
 
           echo "--- Fetching stack file ---"
           STACK_FILE_RESP=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID/file")
+            "$PORTAINER_URL/api/stacks/$STACK_ID/file") || { echo "ERROR: Failed to fetch stack file" >&2; exit 1; }
           STACK_FILE=$(echo "$STACK_FILE_RESP" | jq -r '.StackFileContent')
           STACK_ENV=$(echo "$STACK_FILE_RESP" | jq -c '.Env // []')
           echo "Env vars preserved: $(echo "$STACK_ENV" | jq 'length')"
 
           echo "--- Updating image tags ---"
           UPDATED_FILE=$(echo "$STACK_FILE" | sed \
-            "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
-             s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g")
+            "s|image: .*/callcrafter[^-].*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
+             s|image: .*/callcrafter-ws.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g")
 
           echo "--- Deploying to Portainer ---"
-          curl -sf -X PUT \
+          RESPONSE=$(curl -sf -X PUT \
             -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
               --arg stackFileContent "$UPDATED_FILE" \
               --argjson envVars "$STACK_ENV" \
               '{StackFileContent: $stackFileContent, Env: $envVars, Prune: true}')" \
-            "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID"
+            "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID") || { echo "ERROR: Deploy failed" >&2; exit 1; }
           echo "--- Deploy triggered successfully ---"

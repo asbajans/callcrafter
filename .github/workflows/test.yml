@@ -45,7 +45,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ws-server
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Type check
         working-directory: ws-server
