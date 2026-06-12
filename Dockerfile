@@ -23,9 +23,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY package.json package-lock.json ./
 RUN npm install --legacy-peer-deps --omit=dev && rm -f package-lock.json
 
-# Copy config + migrations for startup migration
+# Copy config + source for startup migration (CLI needs source TS files)
 COPY --from=builder /app/tsconfig.json /app/tsconfig.json
 COPY --from=builder /app/payload.config.ts /app/payload.config.ts
+COPY --from=builder /app/src/payload /app/src/payload
 COPY --from=builder /app/src/migrations /app/src/migrations
 COPY scripts/start.sh /app/start.sh
 
