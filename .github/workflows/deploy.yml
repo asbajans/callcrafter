@@ -67,7 +67,8 @@ jobs:
             HTTP_CODE=$(curl -sS -o /tmp/response.json -w "%{http_code}" \
               -X PUT -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" "$@")
             echo "HTTP $HTTP_CODE"
-            if [ "$HTTP_CODE" != "200" ]; then
+            # 524 = Cloudflare origin timeout; the deploy likely succeeded on Portainer side
+            if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "524" ]; then
               cat /tmp/response.json 2>/dev/null || true
               return 1
             fi
@@ -124,12 +125,15 @@ jobs:
               "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
                s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g" \
               /tmp/stack.yml
+            # Single PUT with Prune — triggers redeploy.
+            # 524 = Cloudflare origin timeout (redeploy takes >100s).
+            # The operation continues on Portainer side even if response times out.
             portainer_put \
               -d "$(jq -n \
                 --rawfile stackFileContent /tmp/stack.yml \
                 --argjson env "$UPDATED_ENV" \
                 '{StackFileContent: $stackFileContent, Env: $env, Prune: true}')" \
               "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" || \
-              { echo "ERROR: Failed to update stack" >&2; exit 1; }
-            echo "--- Stack updated and redeployed ---"
+              { echo "ERROR: Failed to save stack file" >&2; exit 1; }
+            echo "--- Stack updated and redeploy triggered (check Portainer) ---"
           fi
