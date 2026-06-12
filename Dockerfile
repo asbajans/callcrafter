@@ -31,6 +31,7 @@ COPY --from=builder /app/payload.config.ts /app/payload.config.ts
 COPY --from=builder /app/src/migrations /app/src/migrations
 COPY scripts/start.sh /app/start.sh
 
+RUN chmod +x /app/start.sh
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
