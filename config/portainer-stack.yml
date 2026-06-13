@@ -100,7 +100,6 @@ services:
     depends_on:
       app:
         condition: service_started
-      redis:
     networks:
       - callcrafter_network
 
