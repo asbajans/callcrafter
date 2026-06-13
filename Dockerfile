@@ -30,6 +30,7 @@ COPY --from=builder /app/src/payload /app/src/payload
 COPY --from=builder /app/src/migrations /app/src/migrations
 COPY scripts/start.sh /app/start.sh
 
+RUN mkdir -p /app/.tmp && chown nextjs:nodejs /app/.tmp
 RUN chmod +x /app/start.sh
 USER nextjs
 EXPOSE 3000
