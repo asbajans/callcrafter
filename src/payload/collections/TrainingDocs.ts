@@ -80,6 +80,9 @@ export const TrainingDocs: CollectionConfig = {
       if (user.role === 'tenant-admin' && user.tenant) {
         return { tenant: { equals: user.tenant } }
       }
+      if (user.role === 'user' && user.tenant) {
+        return { tenant: { equals: user.tenant } }
+      }
       return false
     },
     create: ({ req: { user } }) => {
