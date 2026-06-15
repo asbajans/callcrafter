@@ -19,6 +19,9 @@ import { Subscriptions } from './src/payload/collections/Subscriptions'
 import { Payments } from './src/payload/collections/Payments'
 import { WebhookLogs } from './src/payload/collections/WebhookLogs'
 import { Media } from './src/payload/collections/Media'
+import { WhatsAppAccounts } from './src/payload/collections/WhatsAppAccounts'
+import { WhatsAppConversations } from './src/payload/collections/WhatsAppConversations'
+import { WhatsAppMessages } from './src/payload/collections/WhatsAppMessages'
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -47,6 +50,9 @@ export default buildConfig({
     Payments,
     WebhookLogs,
     Media,
+    WhatsAppAccounts,
+    WhatsAppConversations,
+    WhatsAppMessages,
   ],
   admin: {
     user: Users.slug,

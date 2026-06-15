@@ -186,6 +186,45 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // WhatsApp
+  getWhatsAppAccounts: () =>
+    request<{ docs: any[] }>('/api/whatsapp/accounts'),
+
+  getWhatsAppConversations: (params?: { page?: number; limit?: number; status?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.status) qs.set('status', params.status)
+    return request<{ docs: any[] }>(`/api/whatsapp/conversations?${qs.toString()}`)
+  },
+
+  getWhatsAppMessages: (conversationId: string) =>
+    request<{ docs: any[] }>(`/api/whatsapp/conversations/${conversationId}/messages`),
+
+  sendWhatsAppMessage: (conversationId: string, data: any) =>
+    request<any>(`/api/whatsapp/conversations/${conversationId}/send`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  sendNewWhatsAppMessage: (data: any) =>
+    request<any>('/api/whatsapp/send-new', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  assignWhatsAppConversation: (id: string, userId: string | null) =>
+    request<any>(`/api/whatsapp/conversations/${id}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify({ userId }),
+    }),
+
+  updateWhatsAppConversationStatus: (id: string, status: string) =>
+    request<any>(`/api/whatsapp/conversations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 };
 
 export function setUser(user: any) {

@@ -1,0 +1,110 @@
+;
+; CallCrafter - PJSIP Configuration Template
+; Copy to /etc/asterisk/pjsip.conf and customize
+;
+
+[transport-udp]
+type = transport
+protocol = udp
+bind = 0.0.0.0:5060
+
+[transport-ws]
+type = transport
+protocol = ws
+bind = 0.0.0.0:8088
+
+[transport-wss]
+type = transport
+protocol = wss
+bind = 0.0.0.0:8089
+
+; WebRTC Endpoint Template
+[webrtc-endpoint](!)
+type = endpoint
+context = from-internal
+disallow = all
+allow = opus,g722,alaw,ulaw
+dtls_auto_generate_cert = yes
+webrtc = yes
+ice_support = yes
+media_encryption = dtls
+media_use_received_transport = yes
+rtcp_mux = yes
+bundle = yes
+force_avp = yes
+dtmf = rfc4733
+send_pai = yes
+send_rpid = yes
+trust_id_outbound = yes
+100rel = yes
+timers = yes
+direct_media = no
+
+; Agent Extensions (1000-1035)
+[1000](webrtc-endpoint)
+auth = auth1000
+aors = 1000
+callerid = "Agent 1000" <1000>
+
+[auth1000]
+type = auth
+auth_type = userpass
+password = webrtc123
+username = 1000
+
+[1000]
+type = aor
+max_contacts = 5
+
+; --- Copy pattern for agents 1001-1035 ---
+
+; VoIP Provider Trunk
+[voip-trunk]
+type = registration
+transport = transport-udp
+server_uri = sip:YOUR_PROVIDER:5060
+client_uri = sip:YOUR_USERNAME@YOUR_PROVIDER
+auth_realm = YOUR_PROVIDER
+auth_username = YOUR_USERNAME
+
+[auth-voip]
+type = auth
+auth_type = userpass
+password = YOUR_PASSWORD
+username = YOUR_USERNAME
+
+[voip]
+type = endpoint
+context = from-pstn
+disallow = all
+allow = ulaw,alaw
+auth = auth-voip
+aors = voip
+direct_media = no
+trust_id_inbound = yes
+send_pai = yes
+
+[voip]
+type = aor
+contact = sip:YOUR_PROVIDER:5060
+
+; GoIP GSM Gateway Trunk
+[fct-trunk]
+type = endpoint
+context = from-pstn
+disallow = all
+allow = ulaw,alaw
+direct_media = no
+identify_by = ip
+
+[fct-trunk]
+type = identify
+endpoint = fct-trunk
+match = 192.168.1.100
+
+; AMI Event Channel
+[mISDN]
+type = endpoint
+context = from-pstn
+disallow = all
+allow = ulaw,alaw

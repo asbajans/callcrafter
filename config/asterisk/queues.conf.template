@@ -1,0 +1,15 @@
+;
+; CallCrafter - Queue Configuration Template
+; Copy to /etc/asterisk/queues.conf
+;
+
+[cc-support]
+musicclass = default
+strategy = ringall
+timeout = 30
+retry = 5
+maxlen = 10
+wrapuptime = 10
+joinempty = yes
+leavewhenempty = no
+ringinuse = no

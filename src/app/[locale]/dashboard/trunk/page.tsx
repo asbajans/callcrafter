@@ -39,6 +39,11 @@ export default function TrunkPage() {
     username: '',
     password: '',
     codecs: '["PCMA","PCMU","G729"]',
+    amiHost: '',
+    amiPort: '5038',
+    amiUser: 'admin',
+    amiSecret: 'admin',
+    agentExtensions: '1000,1001,1002,1003',
   });
 
   const fetchData = async () => {
@@ -59,20 +64,34 @@ export default function TrunkPage() {
   const handleCreate = async () => {
     try {
       setSubmitting(true);
+      const credentials: Record<string, string> = {
+        sipServer: form.sipServer,
+        sipPort: form.sipPort,
+        username: form.username,
+        password: form.password,
+      }
+
+      if (form.provider === 'asterisk') {
+        credentials.ASTERISK_HOST = form.amiHost
+        credentials.ASTERISK_AMI_PORT = form.amiPort
+        credentials.AMI_USER = form.amiUser
+        credentials.AMI_SECRET = form.amiSecret
+        credentials.AGENT_EXTENSIONS = form.agentExtensions
+        credentials.OUTBOUND_CONTEXT = 'outbound-trunk'
+        credentials.SIP_ENDPOINT = 'voip'
+        credentials.RECORD_CALLS = 'true'
+        credentials.DEFAULT_AGENT_EXTENSION = '1000'
+      }
+
       await api.createSipTrunk({
         name: form.name,
         provider: form.provider,
         type: form.type,
-        credentials: {
-          sipServer: form.sipServer,
-          sipPort: form.sipPort,
-          username: form.username,
-          password: form.password,
-        },
+        credentials,
         codecs: JSON.parse(form.codecs || '[]'),
       });
       setShowModal(false);
-      setForm({ name: '', provider: 'twilio', type: 'ours', sipServer: '', sipPort: '5060', username: '', password: '', codecs: '["PCMA","PCMU","G729"]' });
+      setForm({ name: '', provider: 'twilio', type: 'ours', sipServer: '', sipPort: '5060', username: '', password: '', codecs: '["PCMA","PCMU","G729"]', amiHost: '', amiPort: '5038', amiUser: 'admin', amiSecret: 'admin', agentExtensions: '1000,1001,1002,1003' });
       await fetchData();
     } catch (err: any) {
       alert(err.message || 'Failed to create trunk');
@@ -285,6 +304,35 @@ export default function TrunkPage() {
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 />
               </div>
+
+              {form.provider === 'asterisk' && (
+                <div className="border-t border-slate-200 pt-4">
+                  <h3 className="text-sm font-medium text-slate-700 mb-3">Asterisk AMI Settings</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">AMI Host</label>
+                      <input value={form.amiHost} onChange={(e) => setForm({ ...form, amiHost: e.target.value })} placeholder="127.0.0.1" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">AMI Port</label>
+                      <input value={form.amiPort} onChange={(e) => setForm({ ...form, amiPort: e.target.value })} placeholder="5038" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">AMI Username</label>
+                      <input value={form.amiUser} onChange={(e) => setForm({ ...form, amiUser: e.target.value })} placeholder="admin" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">AMI Secret</label>
+                      <input type="password" value={form.amiSecret} onChange={(e) => setForm({ ...form, amiSecret: e.target.value })} placeholder="admin" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Agent Extensions</label>
+                      <input value={form.agentExtensions} onChange={(e) => setForm({ ...form, agentExtensions: e.target.value })} placeholder="1000,1001,1002,1003" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                      <p className="text-xs text-slate-400 mt-1">Comma-separated list of agent extension numbers</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <button

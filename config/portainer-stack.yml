@@ -75,6 +75,10 @@ services:
       S3_BUCKET: ${S3_BUCKET}
       S3_REGION: ${S3_REGION}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      WA_BRIDGE_URL: http://wa-bridge:8080
+      WA_BRIDGE_API_KEY: ${WA_BRIDGE_API_KEY}
+      WA_BRIDGE_WEBHOOK_SECRET: ${WA_BRIDGE_WEBHOOK_SECRET}
+      WHATSAPP_CONTEXT_RESET_MINUTES: ${WHATSAPP_CONTEXT_RESET_MINUTES:-30}
     networks:
       - callcrafter_network
 
@@ -100,6 +104,21 @@ services:
     depends_on:
       app:
         condition: service_started
+    networks:
+      - callcrafter_network
+
+  wa-bridge:
+    image: atendai/evolution-api:latest
+    container_name: wa-bridge
+    restart: unless-stopped
+    environment:
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${WA_BRIDGE_API_KEY}
+      DATABASE_ENABLED: true
+      DATABASE_CONNECTION_URI: ${DATABASE_URI}?schema=evolution
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - callcrafter_network
 

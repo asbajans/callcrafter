@@ -1,4 +1,6 @@
 import type { MediaAdapter, CallSession, IncomingCallPayload, MediaConfig } from './adapters/MediaAdapter';
+import { getPayload } from 'payload'
+import config from '@payload-config'
 
 export class MediaRouter {
   private adapters = new Map<string, MediaAdapter>();
@@ -11,21 +13,24 @@ export class MediaRouter {
   }
 
   async getAdapterForTenant(tenantId: string): Promise<MediaAdapter> {
-    // In production, load tenant's media provider config from DB
-    // and resolve the matching adapter.
-    // For now, return first non-asterisk adapter or throw.
-    for (const [, adapter] of this.adapters) {
-      if (adapter.provider !== 'asterisk') {
-        return adapter;
-      }
+    const payload = await getPayload({ config })
+    const providers = await payload.find({
+      collection: 'provider-configs',
+      where: { and: [{ isActive: { equals: true } }, { tenant: { equals: tenantId } }] },
+      limit: 1,
+    })
+
+    if (providers.docs.length > 0) {
+      const providerConfig = providers.docs[0]
+      const provider = providerConfig.provider as string
+      const adapter = this.adapters.get(provider)
+      if (adapter) return adapter
     }
 
-    const first = this.adapters.values().next().value;
-    if (first) {
-      return first;
-    }
+    const first = this.adapters.values().next().value
+    if (first) return first
 
-    throw new Error(`MediaRouter: no adapter registered for tenant ${tenantId}`);
+    throw new Error(`MediaRouter: no adapter registered for tenant ${tenantId}`)
   }
 
   async getAdapterForProvider(provider: string): Promise<MediaAdapter> {

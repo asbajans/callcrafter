@@ -1,0 +1,12 @@
+;
+; CallCrafter - RTP Configuration Template
+; Copy to /etc/asterisk/rtp.conf
+;
+
+[general]
+rtpstart = 10000
+rtpend = 10050
+strictrtp = yes
+probation = 0
+icesupport = yes
+stunaddr = stun.l.google.com:19302

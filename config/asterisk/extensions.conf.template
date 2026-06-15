@@ -1,0 +1,78 @@
+;
+; CallCrafter - Dialplan Configuration Template
+; Copy to /etc/asterisk/extensions.conf and customize
+;
+
+[ivr-main]
+exten => s,1,Noop(IVR Main Entry)
+same => n,GotoIfTime(09:00-18:00,mon-fri,*,*?in-hours,s,1)
+same => n,GotoIfTime(09:00-13:00,sat,*,*?in-hours,s,1)
+same => n,Goto(after-hours,s,1)
+
+[in-hours]
+exten => s,1,Background(custom/ivr-welcome)
+same => n,WaitExten(5)
+
+exten => 1,1,Queue(cc-support)
+same => n,Hangup
+
+exten => 2,1,Queue(cc-sales)
+same => n,Hangup
+
+exten => 3,1,Dial(PJSIP/1000,30)
+same => n,Hangup
+
+exten => 4,1,Goto(leave-message,s,1)
+same => n,Hangup
+
+exten => t,1,Goto(leave-message,s,1)
+exten => i,1,Goto(leave-message,s,1)
+
+[after-hours]
+exten => s,1,Background(custom/after-hours)
+same => n,WaitExten(5)
+
+exten => 1,1,Goto(leave-message,s,1)
+exten => t,1,Goto(leave-message,s,1)
+exten => i,1,Goto(leave-message,s,1)
+
+[leave-message]
+exten => s,1,Noop(Leave Message)
+same => n,Record(/var/spool/asterisk/voicemail/${UNIQUEID}.wav)
+same => n,AGI(after-hours-ticket.sh)
+same => n,Playback(vm-msgsaved)
+same => n,Hangup
+
+[from-pstn]
+exten => _1XXX,1,Dial(PJSIP/${EXTEN},30)
+same => n,Hangup
+
+exten => _X.,1,Noop(Inbound call from ${CALLERID(num)})
+same => n,Set(CALLERID(name)=${IF($[${LEN(${CALLERID(name)})}>0]?${CALLERID(name)}:${CALLERID(num)})})
+same => n,Goto(ivr-main,s,1)
+
+[from-internal]
+exten => _1XXX,1,Dial(PJSIP/${EXTEN},30)
+same => n,VoiceMail(${EXTEN}@default,u)
+same => n,Hangup
+
+exten => _9.,1,Noop(Outbound via GoIP)
+same => n,Dial(PJSIP/${EXTEN:1}@fct-trunk,30)
+same => n,Hangup
+
+exten => _8.,1,Noop(Outbound via VoIP)
+same => n,Dial(PJSIP/${EXTEN:1}@voip,30)
+same => n,Hangup
+
+[outbound-trunk]
+exten => _X.,1,Noop(Outbound trunk: ${TRUNK_DIAL})
+same => n,Dial(${TRUNK_DIAL},30)
+same => n,Hangup
+
+[play-tts]
+exten => s,1,Noop(Play TTS: ${TTS_TEXT})
+same => n,Answer()
+same => n,Set(CHANNEL(musicclass)=${TTS_TEXT})
+same => n,Wait(1)
+same => n,AGI(tts.agi,${TTS_TEXT})
+same => n,Hangup

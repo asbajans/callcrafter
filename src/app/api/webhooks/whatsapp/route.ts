@@ -1,25 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '../../../../../payload.config'
+import config from '@payload-config'
 import { WhatsAppAdapter } from '@/channels/whatsapp/WhatsAppAdapter'
-import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
-
-const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
-  'gpt-4': { provider: 'openai', model: 'gpt-4' },
-  'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
-  'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-  'claude-3-opus': { provider: 'anthropic', model: 'claude-3-opus-latest' },
-  'claude-3-sonnet': { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
-  'claude-3-haiku': { provider: 'anthropic', model: 'claude-3-5-haiku-latest' },
-}
-
-function getWhatsAppAdapter(): WhatsAppAdapter {
-  return new WhatsAppAdapter({
-    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
-    webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '',
-  })
-}
+import {
+  resolveAccount, createAdapter, findOrCreateConversation,
+  logWhatsAppMessage, processWithAI, updateConversationLastMessage,
+} from './shared'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -27,9 +13,29 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token') || ''
   const challenge = searchParams.get('hub.challenge') || ''
 
-  const adapter = getWhatsAppAdapter()
-  const result = adapter.verifyWebhook(mode, token, challenge)
+  const payload = await getPayload({ config })
+  const accounts = await payload.find({
+    collection: 'whatsapp-accounts' as any,
+    where: {
+      and: [
+        { connectionType: { equals: 'cloud_api' } },
+        { isActive: { equals: true } },
+      ],
+    },
+    limit: 1,
+  })
 
+  if (accounts.docs.length === 0) {
+    return NextResponse.json({ error: 'No WhatsApp account configured' }, { status: 403 })
+  }
+
+  const account = accounts.docs[0]
+  const adapter = createAdapter(account)
+  if (!adapter) {
+    return NextResponse.json({ error: 'Adapter not available' }, { status: 500 })
+  }
+
+  const result = adapter.verifyWebhook(mode, token, challenge)
   if (result) {
     return new NextResponse(challenge, { status: 200 })
   }
@@ -40,130 +46,116 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const adapter = getWhatsAppAdapter()
-    const messages = adapter.handleWebhook(body)
-
-    if (messages.length === 0) {
-      return NextResponse.json({ status: 'ok' })
-    }
-
     const payload = await getPayload({ config })
 
-    for (const msg of messages) {
-      if (!msg.text) continue
+    const accounts = await payload.find({
+      collection: 'whatsapp-accounts' as any,
+      where: {
+        and: [
+          { connectionType: { equals: 'cloud_api' } },
+          { isActive: { equals: true } },
+        ],
+      },
+      depth: 1,
+      limit: 1,
+    })
 
-      const agents = await payload.find({
-        collection: 'agents',
-        where: {
-          channels: { contains: 'whatsapp' },
-          status: { equals: 'active' },
-        },
-        depth: 2,
+    if (accounts.docs.length === 0) {
+      return NextResponse.json({ status: 'no account' })
+    }
+
+    const account = accounts.docs[0]
+    const adapter = createAdapter(account)
+    if (!adapter) {
+      return NextResponse.json({ status: 'no adapter' })
+    }
+
+    const webhookData = adapter.handleWebhook(body)
+
+    await payload.create({
+      collection: 'webhook-logs',
+      data: {
+        eventType: 'whatsapp_inbound',
+        source: 'whatsapp',
+        status: 'success',
+        payload: body,
+      },
+    })
+
+    for (const statusUpdate of webhookData.statuses) {
+      const messages = await payload.find({
+        collection: 'whatsapp-messages' as any,
+        where: { whatsAppMessageId: { equals: statusUpdate.messageId } },
+        limit: 1,
       })
-
-      if (agents.docs.length === 0) {
-        await adapter.sendText(msg.from, 'No active agent configured.')
-        continue
-      }
-
-      const agent = agents.docs[0]
-      const voice = agent.voice as any
-
-      let trainingContext = ''
-      if (agent.trainingDocs && agent.trainingDocs.length > 0) {
-        const trainingDocIds = agent.trainingDocs.map((d: any) =>
-          typeof d === 'object' ? d.id : d
-        )
-        const trainingDocs = await payload.find({
-          collection: 'training-docs',
-          where: { id: { in: trainingDocIds.join(',') } },
+      if (messages.docs.length > 0) {
+        await payload.update({
+          collection: 'whatsapp-messages' as any,
+          id: messages.docs[0].id,
+          data: {
+            status: statusUpdate.status,
+            deliveredAt: statusUpdate.status === 'delivered' ? statusUpdate.timestamp.toISOString() : undefined,
+            readAt: statusUpdate.status === 'read' ? statusUpdate.timestamp.toISOString() : undefined,
+          } as any,
         })
-        trainingContext = trainingDocs.docs.map((d: any) => d.content).join('\n\n').slice(0, 10000)
+      }
+    }
+
+    for (const msg of webhookData.messages) {
+      if (msg.type === 'text' && !msg.text) continue
+
+      const conversation = await findOrCreateConversation(account, account.tenant, msg.from, msg.name)
+
+      const messageBody = msg.text ?? msg.mediaCaption ?? ''
+      const messageType = msg.type === 'location' ? 'location' : msg.mediaUrl ? msg.type : 'text'
+
+      const logData: any = {
+        whatsAppMessageId: msg.id,
+        messageType,
+        body: messageBody,
+        mediaUrl: msg.mediaUrl,
+        mediaMimeType: msg.mediaMimeType,
+        mediaCaption: msg.mediaCaption,
       }
 
-      const modelConfig = modelMap[agent.model as string] || { provider: 'openai', model: 'gpt-4o' }
-      const apiKeyForProvider =
-        modelConfig.provider === 'openai'
-          ? process.env.OPENAI_API_KEY!
-          : process.env.ANTHROPIC_API_KEY!
+      if (msg.type === 'location') {
+        logData.body = `${msg.latitude},${msg.longitude}`
+      }
 
-      const orchestrator = new AgentOrchestrator({
-        provider: modelConfig.provider,
-        apiKey: apiKeyForProvider,
-        model: modelConfig.model,
-      })
+      await logWhatsAppMessage(conversation.id, 'inbound', logData)
+      await updateConversationLastMessage(conversation.id, messageBody)
 
-      const existingConversations = await payload.find({
-        collection: 'conversations',
-        where: {
-          and: [
-            { externalId: { equals: `wa_${msg.from}` } },
-            { status: { equals: 'active' } },
-          ],
-        },
+      if (!messageBody) continue
+
+      const agent = conversation.agent
+      if (!agent) continue
+
+      const recentMessages = await payload.find({
+        collection: 'whatsapp-messages' as any,
+        where: { conversation: { equals: conversation.id } },
+        sort: '-createdAt',
+        limit: 10,
         depth: 0,
       })
 
-      let conversationId: number
+      const history = recentMessages.docs.reverse().map((m: any) => ({
+        role: m.direction === 'inbound' ? 'user' : 'assistant',
+        content: m.body || '',
+      }))
 
-      if (existingConversations.docs.length === 0) {
-        const newConversation = await payload.create({
-          collection: 'conversations',
-          data: {
-            tenant: typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant,
-            agent: agent.id,
-            channel: 'whatsapp',
-            externalId: `wa_${msg.from}`,
-            contact: { phone: msg.from, waId: msg.id },
-            status: 'active',
-            startTime: new Date().toISOString(),
-          },
-        })
-        conversationId = newConversation.id as number
-      } else {
-        conversationId = existingConversations.docs[0].id as number
-      }
+      const agentData = typeof agent === 'object' ? agent : await payload.findByID({ collection: 'agents', id: agent, depth: 2 })
+      if (!agentData) continue
 
-      const now = new Date().toISOString()
+      const responseText = await processWithAI(agentData, messageBody, history)
 
-      await payload.create({
-        collection: 'messages',
-        data: {
-          conversation: conversationId,
-          role: 'user',
-          content: msg.text,
-          timestamp: now,
-          metadata: { waMessageId: msg.id, channel: 'whatsapp' },
-        },
-      })
-
-      const result = await orchestrator.process({
-        text: msg.text,
-        context: {
-          agentId: String(agent.id),
-          tenantId: typeof agent.tenant === 'object' ? String(agent.tenant.id) : String(agent.tenant),
-          systemPrompt: agent.systemPrompt,
-          conversationHistory: [],
-          trainingContext,
-          channel: 'whatsapp',
-          tools: (agent.tools || []) as any,
-        },
-        channel: 'whatsapp',
-      })
-
-      await adapter.sendText(msg.from, result.content)
+      await adapter.sendText(msg.from, responseText)
       await adapter.markAsRead(msg.id)
 
-      await payload.create({
-        collection: 'messages',
-        data: {
-          conversation: conversationId,
-          role: 'assistant',
-          content: result.content,
-          timestamp: now,
-          metadata: { channel: 'whatsapp' },
-        },
+      await logWhatsAppMessage(conversation.id, 'outbound', {
+        messageType: 'text',
+        body: responseText,
       })
+      await updateConversationLastMessage(conversation.id, responseText)
     }
 
     return NextResponse.json({ status: 'ok' })

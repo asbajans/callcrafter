@@ -2,7 +2,15 @@ export {
   WhatsAppAdapter,
   type WhatsAppConfig,
   type WhatsAppMessage,
+  type WhatsAppStatusUpdate,
+  type WhatsAppWebhookPayload,
 } from './whatsapp/WhatsAppAdapter';
+
+export {
+  WhatsAppQRBridgeAdapter,
+  type WhatsAppQRBridgeConfig,
+  type QrSessionInfo,
+} from './whatsapp/WhatsAppQRBridgeAdapter';
 
 export {
   InstagramAdapter,
