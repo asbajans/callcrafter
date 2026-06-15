@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { setToken, setUser } from '@/lib/api';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email'),
@@ -56,14 +55,6 @@ export default function LoginPage() {
         const data = await res.json();
         setApiError(data.error || t('common.error'));
         return;
-      }
-
-      const data = await res.json();
-      if (data.token) {
-        setToken(data.token);
-      }
-      if (data.user) {
-        setUser(data.user);
       }
 
       router.push('/en/dashboard');

@@ -9,20 +9,16 @@ class ApiError extends Error {
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
-  token?: string,
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const res = await fetch(endpoint, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   if (!res.ok) {
@@ -33,16 +29,10 @@ async function request<T>(
   return res.json();
 }
 
-function getToken(): string | undefined {
-  if (typeof window === 'undefined') return undefined;
-  const stored = localStorage.getItem('callcrafter_token');
-  return stored || undefined;
-}
-
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    request<{ token: string; user: any }>('/api/users/login', {
+    request<{ token: string; user: any }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -54,100 +44,96 @@ export const api = {
     }),
 
   // Agents
-  getAgents: (token?: string) =>
-    request<{ docs: any[]; totalDocs: number }>('/api/agents', {}, token || getToken()),
+  getAgents: () =>
+    request<{ docs: any[]; totalDocs: number }>('/api/agents'),
 
   getAgent: (id: string) =>
-    request<any>(`/api/agents/${id}`, {}, getToken()),
+    request<any>(`/api/agents/${id}`),
 
   createAgent: (data: any) =>
     request<any>('/api/agents', {
       method: 'POST',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   updateAgent: (id: string, data: any) =>
     request<any>(`/api/agents/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   deleteAgent: (id: string) =>
-    request<void>(`/api/agents/${id}`, { method: 'DELETE' }, getToken()),
+    request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
 
   // Voice Configs
   getVoices: () =>
-    request<{ docs: any[] }>('/api/voice-configs', {}, getToken()),
+    request<{ docs: any[] }>('/api/voice-configs'),
 
   // Phone Numbers
   getPhoneNumbers: () =>
-    request<{ docs: any[] }>('/api/phone-numbers', {}, getToken()),
+    request<{ docs: any[] }>('/api/phone-numbers'),
 
   createPhoneNumber: (data: any) =>
     request<any>('/api/phone-numbers', {
       method: 'POST',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   updatePhoneNumber: (id: string, data: any) =>
     request<any>(`/api/phone-numbers/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   deletePhoneNumber: (id: string) =>
-    request<void>(`/api/phone-numbers/${id}`, { method: 'DELETE' }, getToken()),
+    request<void>(`/api/phone-numbers/${id}`, { method: 'DELETE' }),
 
   // SIP Trunks
   getSipTrunks: () =>
-    request<{ docs: any[] }>('/api/sip-trunks', {}, getToken()),
+    request<{ docs: any[] }>('/api/sip-trunks'),
 
   createSipTrunk: (data: any) =>
     request<any>('/api/sip-trunks', {
       method: 'POST',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   updateSipTrunk: (id: string, data: any) =>
     request<any>(`/api/sip-trunks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   deleteSipTrunk: (id: string) =>
-    request<void>(`/api/sip-trunks/${id}`, { method: 'DELETE' }, getToken()),
+    request<void>(`/api/sip-trunks/${id}`, { method: 'DELETE' }),
 
   // Conversations
   getConversations: (params?: { limit?: number; page?: number }) =>
     request<{ docs: any[]; totalDocs: number; page: number; totalPages: number }>(
-      `/api/conversations?limit=${params?.limit || 20}&page=${params?.page || 1}${params ? '' : ''}`,
-      {},
-      getToken(),
+      `/api/conversations?limit=${params?.limit || 20}&page=${params?.page || 1}`,
     ),
 
   getConversation: (id: string) =>
-    request<any>(`/api/conversations/${id}`, {}, getToken()),
+    request<any>(`/api/conversations/${id}`),
 
   // Messages
   getMessages: (conversationId: string) =>
     request<{ docs: any[] }>(
       `/api/messages?where[conversation][equals]=${conversationId}&sort=timestamp`,
-      {},
-      getToken(),
     ),
 
   // Training Docs
   getTrainingDocs: () =>
-    request<{ docs: any[] }>('/api/training-docs', {}, getToken()),
+    request<{ docs: any[] }>('/api/training-docs'),
 
   createTrainingDoc: (data: { title: string; content: string; tags?: string[]; agentId?: string }) =>
     request<any>('/api/training-docs', {
       method: 'POST',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   deleteTrainingDoc: (id: string) =>
-    request<void>(`/api/training-docs/${id}`, { method: 'DELETE' }, getToken()),
+    request<void>(`/api/training-docs/${id}`, { method: 'DELETE' }),
 
   // Pricing Plans
   getPricingPlans: () =>
@@ -155,62 +141,56 @@ export const api = {
 
   // Subscriptions
   getSubscriptions: () =>
-    request<{ docs: any[] }>('/api/subscriptions', {}, getToken()),
+    request<{ docs: any[] }>('/api/subscriptions'),
 
   // Tenants
   getTenants: () =>
-    request<{ docs: any[] }>('/api/tenants', {}, getToken()),
+    request<{ docs: any[] }>('/api/tenants'),
 
   updateTenant: (id: string, data: any) =>
     request<any>(`/api/tenants/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   // Users
   getCurrentUser: () =>
-    request<any>('/api/users/me', {}, getToken()),
+    request<any>('/api/users/me'),
 
   getUsers: () =>
-    request<{ docs: any[] }>('/api/users', {}, getToken()),
+    request<{ docs: any[] }>('/api/users'),
 
   updateUser: (id: string, data: any) =>
     request<any>(`/api/users/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 
   deleteUser: (id: string) =>
-    request<void>(`/api/users/${id}`, { method: 'DELETE' }, getToken()),
+    request<void>(`/api/users/${id}`, { method: 'DELETE' }),
 
   // Payments (Admin)
   getPayments: () =>
-    request<{ docs: any[] }>('/api/payments', {}, getToken()),
+    request<{ docs: any[] }>('/api/payments'),
 
   // Webhook Logs (Admin)
   getWebhookLogs: () =>
-    request<{ docs: any[] }>('/api/webhook-logs', {}, getToken()),
+    request<{ docs: any[] }>('/api/webhook-logs'),
 
   // Provider Configs (Admin)
   getProviderConfigs: () =>
-    request<{ docs: any[] }>('/api/provider-configs', {}, getToken()),
+    request<{ docs: any[] }>('/api/provider-configs'),
 
   createProviderConfig: (data: any) =>
     request<any>('/api/provider-configs', {
       method: 'POST',
       body: JSON.stringify(data),
-    }, getToken()),
+    }),
 };
 
-export function setToken(token: string) {
+export function setUser(user: any) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('callcrafter_token', token);
-  }
-}
-
-export function clearToken() {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('callcrafter_token');
+    localStorage.setItem('callcrafter_user', JSON.stringify(user));
   }
 }
 
@@ -218,10 +198,4 @@ export function getUser(): any | null {
   if (typeof window === 'undefined') return null;
   const stored = localStorage.getItem('callcrafter_user');
   return stored ? JSON.parse(stored) : null;
-}
-
-export function setUser(user: any) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('callcrafter_user', JSON.stringify(user));
-  }
 }
