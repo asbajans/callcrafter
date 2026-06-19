@@ -57,6 +57,20 @@
     "forwardTo": "Yönlendirilecek Asistan",
     "sipTrunk": "SIP Bağlantısı"
   },
+  "landing": {
+    "processed_calls": "İşlenmiş Çağrı",
+    "uptime": "Çalışma Süresi",
+    "avg_rating": "Ortalama Puan",
+    "countries": "Ülke",
+    "ai_agents": "AI Asistanlar",
+    "ai_agents_desc": "Doğal dil işleme ile müşterilerinizi anlayan ve yanıtlayan akıllı ses asistanları.",
+    "multi_channel": "Çok Kanallı",
+    "multi_channel_desc": "Ses, WhatsApp, Instagram ve web sohbeti üzerinden kesintisiz müşteri iletişimi.",
+    "smart_routing": "Akıllı Yönlendirme",
+    "smart_routing_desc": "Yapay zeka ile çağrıları doğru asistana veya departmana yönlendirin.",
+    "analytics": "Analitik",
+    "analytics_desc": "Gerçek zamanlı raporlar ve içgörüler ile çağrı performansınızı takip edin."
+  },
   "common": {
     "save": "Kaydet",
     "cancel": "İptal",

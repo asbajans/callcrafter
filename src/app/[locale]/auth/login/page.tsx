@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -16,6 +16,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const t = useTranslations();
   const router = useRouter();
+  const params = useParams();
+  const locale = params.locale as string;
   const [form, setForm] = useState<LoginForm>({ email: '', password: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginForm, string>>>({});
   const [apiError, setApiError] = useState('');
@@ -57,7 +59,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/en/dashboard');
+      router.push(`/${locale}/dashboard`);
     } catch {
       setApiError(t('common.error'));
     } finally {
@@ -123,7 +125,7 @@ export default function LoginPage() {
 
         <p className="text-center text-slate-400 text-sm mt-6">
           {t('auth.noAccount')}{' '}
-          <Link href="/en/auth/register" className="text-indigo-400 hover:text-indigo-300">
+          <Link href={`/${locale}/auth/register`} className="text-indigo-400 hover:text-indigo-300">
             {t('auth.registerButton')}
           </Link>
         </p>

@@ -57,6 +57,20 @@
     "forwardTo": "Forward To Agent",
     "sipTrunk": "SIP Trunk"
   },
+  "landing": {
+    "processed_calls": "Processed Calls",
+    "uptime": "Uptime",
+    "avg_rating": "Average Rating",
+    "countries": "Countries",
+    "ai_agents": "AI Agents",
+    "ai_agents_desc": "Intelligent voice agents that understand and respond to your customers with natural language processing.",
+    "multi_channel": "Multi-Channel",
+    "multi_channel_desc": "Seamless customer communication across voice, WhatsApp, Instagram, and web chat.",
+    "smart_routing": "Smart Routing",
+    "smart_routing_desc": "AI-powered routing to direct calls to the right agent or department.",
+    "analytics": "Analytics",
+    "analytics_desc": "Track your call performance with real-time reports and actionable insights."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

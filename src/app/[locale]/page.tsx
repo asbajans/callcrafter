@@ -71,7 +71,7 @@ const pricingPlans = [
   },
 ];
 
-export default function HomePage() {
+export default function HomePage({ params: { locale } }: { params: { locale: string } }) {
   const t = useTranslations();
 
   return (
@@ -86,13 +86,13 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-4">
             <Link
-              href="/en/auth/login"
+              href="/${locale}/auth/login"
               className="text-slate-300 hover:text-white transition-colors"
             >
               {t('auth.login')}
             </Link>
             <Link
-              href="/en/auth/register"
+              href="/${locale}/auth/register"
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 transition-colors"
             >
               {t('auth.registerButton')}
@@ -122,7 +122,7 @@ export default function HomePage() {
           </p>
           <div className="flex items-center justify-center gap-4">
             <Link
-              href="/en/auth/register"
+              href="/${locale}/auth/register"
               className="bg-indigo-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40"
             >
               Start Free Trial
@@ -209,7 +209,7 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <Link
-                  href="/en/auth/register"
+                  href="/${locale}/auth/register"
                   className={`block text-center py-3 rounded-xl font-semibold transition-colors ${
                     plan.highlighted
                       ? 'bg-white text-indigo-600 hover:bg-indigo-50'
@@ -232,7 +232,7 @@ export default function HomePage() {
               Join thousands of businesses using CallCrafter AI to provide exceptional customer service.
             </p>
             <Link
-              href="/en/auth/register"
+              href="/${locale}/auth/register"
               className="inline-block bg-indigo-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25"
             >
               Start Your Free Trial
