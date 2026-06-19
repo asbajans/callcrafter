@@ -8,6 +8,12 @@ export const Messages: CollectionConfig = {
   },
   fields: [
     {
+      name: 'tenant',
+      type: 'relationship',
+      relationTo: 'tenants',
+      required: true,
+    },
+    {
       name: 'conversation',
       type: 'relationship',
       relationTo: 'conversations',
@@ -70,19 +76,32 @@ export const Messages: CollectionConfig = {
     read: ({ req: { user } }) => {
       if (!user) return false
       if (['admin', 'super-admin'].includes(user.role as string)) return true
-      return true
+      if (user.tenant) {
+        return { tenant: { equals: user.tenant } }
+      }
+      return false
     },
     create: ({ req: { user } }) => {
       if (!user) return false
-      return true
+      if (['admin', 'super-admin'].includes(user.role as string)) return true
+      if (user.tenant) return true
+      return false
     },
     update: ({ req: { user } }) => {
       if (!user) return false
-      return ['admin', 'super-admin'].includes(user.role as string)
+      if (['admin', 'super-admin'].includes(user.role as string)) return true
+      if (user.role === 'tenant-admin' && user.tenant) {
+        return { tenant: { equals: user.tenant } }
+      }
+      return false
     },
     delete: ({ req: { user } }) => {
       if (!user) return false
-      return ['admin', 'super-admin'].includes(user.role as string)
+      if (['admin', 'super-admin'].includes(user.role as string)) return true
+      if (user.role === 'tenant-admin' && user.tenant) {
+        return { tenant: { equals: user.tenant } }
+      }
+      return false
     },
   },
 }

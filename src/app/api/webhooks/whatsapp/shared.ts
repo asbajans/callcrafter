@@ -3,6 +3,7 @@ import config from '@payload-config'
 import { WhatsAppAdapter, type WhatsAppConfig } from '@/channels/whatsapp/WhatsAppAdapter'
 import { WhatsAppQRBridgeAdapter, type WhatsAppQRBridgeConfig } from '@/channels/whatsapp/WhatsAppQRBridgeAdapter'
 import { AgentOrchestrator, type AgentContext } from '@/ai/orchestrator/AgentOrchestrator'
+import postgres from 'postgres'
 
 const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
   'gpt-4': { provider: 'openai', model: 'gpt-4' },
@@ -49,26 +50,171 @@ export function createQrAdapter(account: any): WhatsAppQRBridgeAdapter | null {
   })
 }
 
-export async function findOrCreateConversation(account: any, tenantId: string | number, contactPhone: string, contactName?: string) {
+let dbClient: any = null;
+function getDbClient() {
+  if (!dbClient) {
+    dbClient = postgres(process.env.DATABASE_URI || '');
+  }
+  return dbClient;
+}
+
+export async function tryResolveQrPhoneFromEvolutionContact(qrSessionId: string, contactName: string): Promise<string | null> {
+  if (!qrSessionId || !contactName) return null;
+  const sql = getDbClient();
+  try {
+    const results = await sql`
+      SELECT c."remoteJid"
+      FROM evolution."Contact" c
+      INNER JOIN evolution."Instance" i ON i."id" = c."instanceId"
+      WHERE i."name" = ${qrSessionId}
+        AND LOWER(c."pushName") = LOWER(${contactName})
+        AND c."remoteJid" LIKE '%@s.whatsapp.net'
+      ORDER BY c."createdAt" DESC
+      LIMIT 1
+    `;
+    if (results.length > 0) {
+      const rawJid = results[0].remoteJid;
+      return rawJid ? rawJid.split('@')[0].replace(/\D/g, '') : null;
+    }
+  } catch (err) {
+    console.warn('Failed to resolve QR target phone from evolution contact table:', err);
+  }
+  return null;
+}
+
+export async function tryResolveJidFromEvolutionContact(qrSessionId: string, targetJid: string): Promise<string | null> {
+  if (!qrSessionId || !targetJid) return null;
+  const isLid = targetJid.endsWith('@lid');
+  const searchPattern = isLid ? '%@s.whatsapp.net' : '%@lid';
+  const sql = getDbClient();
+  try {
+    const results = await sql`
+      SELECT c2."remoteJid"
+      FROM evolution."Contact" c1
+      INNER JOIN evolution."Contact" c2 ON c1."instanceId" = c2."instanceId"
+      INNER JOIN evolution."Instance" i ON i."id" = c1."instanceId"
+      WHERE i."name" = ${qrSessionId}
+        AND c1."remoteJid" = ${targetJid}
+        AND c2."remoteJid" LIKE ${searchPattern}
+        AND (
+          (c1."profilePicUrl" IS NOT NULL AND c1."profilePicUrl" != '' 
+           AND c2."profilePicUrl" IS NOT NULL AND c2."profilePicUrl" != ''
+           AND split_part(split_part(c1."profilePicUrl", '?', 1), '/', cardinality(string_to_array(split_part(c1."profilePicUrl", '?', 1), '/'))) =
+               split_part(split_part(c2."profilePicUrl", '?', 1), '/', cardinality(string_to_array(split_part(c2."profilePicUrl", '?', 1), '/')))
+          )
+          OR
+          (c1."pushName" IS NOT NULL AND c1."pushName" != '' AND LOWER(c1."pushName") = LOWER(c2."pushName"))
+        )
+      ORDER BY c2."createdAt" DESC
+      LIMIT 1
+    `;
+    if (results.length > 0) {
+      return results[0].remoteJid || null;
+    }
+  } catch (err) {
+    console.warn('Failed to resolve cross JID for targetJid:', targetJid, err);
+  }
+  return null;
+}
+
+export async function findOrCreateConversation(
+  account: any,
+  tenantId: string | number,
+  contactPhone: string,
+  contactName?: string,
+  contactJid?: string
+) {
   const payload = await getPayload({ config })
+
+  let targetJid = contactJid || '';
+  if (!targetJid && !contactPhone.includes('@')) {
+    targetJid = `${contactPhone}@s.whatsapp.net`;
+  }
+
+  const phoneCandidates = [contactPhone];
+
+  // Try to cross-resolve JID/LID using Evolution Contact database if QR mode
+  if (account.connectionType === 'qr' && account.qrSessionId && targetJid) {
+    const resolvedJid = await tryResolveJidFromEvolutionContact(account.qrSessionId, targetJid);
+    if (resolvedJid) {
+      if (resolvedJid.endsWith('@lid')) {
+        targetJid = resolvedJid;
+      } else {
+        const resolvedPhone = resolvedJid.split('@')[0].replace(/\D/g, '');
+        if (resolvedPhone && !phoneCandidates.includes(resolvedPhone)) {
+          phoneCandidates.push(resolvedPhone);
+        }
+      }
+    }
+  }
+
+  const cleanJid = targetJid.trim().toLowerCase();
+
+  // Search query
+  const searchQueries: any[] = phoneCandidates.map(phone => ({
+    contactPhone: { equals: phone }
+  }));
+  if (cleanJid) {
+    searchQueries.push({ contactJid: { equals: cleanJid } });
+  }
 
   const existing = await payload.find({
     collection: 'whatsapp-conversations' as any,
     where: {
       and: [
         { account: { equals: account.id } },
-        { contactPhone: { equals: contactPhone } },
         { status: { not_equals: 'closed' } },
+        {
+          or: searchQueries
+        }
       ],
     },
     depth: 1,
     limit: 1,
-  })
+  });
 
   if (existing.docs.length > 0) {
-    return existing.docs[0]
+    const conv = existing.docs[0];
+    const updates: any = {};
+
+    if (contactName && conv.contactName !== contactName) {
+      updates.contactName = contactName;
+    }
+    if (cleanJid && conv.contactJid !== cleanJid) {
+      updates.contactJid = cleanJid;
+    }
+
+    // If the conversation is LID-only, and we now have a real phone number candidate, update it
+    const isLidOnly = conv.contactJid?.endsWith('@lid') && conv.contactPhone === conv.contactJid.split('@')[0].replace(/\D/g, '');
+    const realPhone = phoneCandidates.find(p => !p.endsWith('@lid') && p !== conv.contactPhone);
+    if (isLidOnly && realPhone) {
+      updates.contactPhone = realPhone;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      return await payload.update({
+        collection: 'whatsapp-conversations' as any,
+        id: conv.id,
+        data: updates
+      });
+    }
+
+    return conv;
   }
 
+  // Determine actual target phone to create with
+  let finalPhone = contactPhone;
+  if ((contactPhone.endsWith('@lid') || targetJid.endsWith('@lid')) && account.connectionType === 'qr' && account.qrSessionId) {
+    const resolvedPhoneJid = await tryResolveJidFromEvolutionContact(account.qrSessionId, targetJid || contactPhone);
+    if (resolvedPhoneJid && resolvedPhoneJid.endsWith('@s.whatsapp.net')) {
+      const resolvedPhone = resolvedPhoneJid.split('@')[0].replace(/\D/g, '');
+      if (resolvedPhone) {
+        finalPhone = resolvedPhone;
+      }
+    }
+  }
+
+  // Create new conversation
   const agents = await payload.find({
     collection: 'agents',
     where: {
@@ -88,15 +234,16 @@ export async function findOrCreateConversation(account: any, tenantId: string | 
       account: account.id,
       tenant: tenantId,
       agent: agents.docs[0]?.id || undefined,
-      contactPhone,
+      contactPhone: finalPhone,
       contactName: contactName || null,
+      contactJid: cleanJid || null,
       status: 'open',
       unreadCount: 1,
       lastMessageAt: new Date().toISOString(),
     } as any,
   })
 
-  return conversation
+  return conversation;
 }
 
 export async function logWhatsAppMessage(conversationId: number | string, direction: 'inbound' | 'outbound', messageData: {

@@ -40,12 +40,43 @@ const features = [
   }
 ];
 
+const socialProof = [
+  { number: '10.000+', label: 'processed_calls', color: 'from-indigo-400 to-indigo-600' },
+  { number: '98.5%', label: 'uptime', color: 'from-emerald-400 to-emerald-600' },
+  { number: '4.9/5', label: 'avg_rating', color: 'from-amber-400 to-amber-600' },
+  { number: '50+', label: 'countries', color: 'from-rose-400 to-rose-600' },
+];
+
+const pricingPlans = [
+  {
+    name: 'starter',
+    price: '$29',
+    period: '/month',
+    features: ['1 AI agent', '500 min/month', 'Voice + Chat', 'Email support'],
+    highlighted: false,
+  },
+  {
+    name: 'professional',
+    price: '$99',
+    period: '/month',
+    features: ['5 AI agents', '5000 min/month', 'All channels', 'Priority support', 'Training docs'],
+    highlighted: true,
+  },
+  {
+    name: 'enterprise',
+    price: '$299',
+    period: '/month',
+    features: ['Unlimited agents', 'Unlimited minutes', 'Custom integration', 'Dedicated support', 'SLA guarantee'],
+    highlighted: false,
+  },
+];
+
 export default function HomePage() {
   const t = useTranslations();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <header className="border-b border-slate-700">
+      <header className="border-b border-slate-700/50 backdrop-blur-sm fixed w-full top-0 z-50 bg-slate-900/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
@@ -70,46 +101,186 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main>
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16 text-center">
-          <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6">
-            CallCrafter AI
+      <main className="pt-16">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-300 text-sm font-medium mb-8">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+            </span>
+            AI-Powered Call Center Solution
+          </div>
+
+          <h1 className="text-5xl sm:text-7xl font-bold text-white mb-6 leading-tight">
+            Transform Your
+            <span className="bg-gradient-to-r from-indigo-400 to-amber-400 bg-clip-text text-transparent"> Customer Experience</span>
+            <br />with AI
           </h1>
-          <p className="text-xl text-slate-400 mb-8 max-w-2xl mx-auto">
-            AI destekli akıllı çağrı merkezi çözümü. Müşteri deneyimini yapay zeka ile dönüştürün.
+          <p className="text-xl text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
+            CallCrafter AI handles your incoming calls intelligently — never miss a customer again.
+            Multi-channel support, smart routing, and real-time analytics.
           </p>
           <div className="flex items-center justify-center gap-4">
             <Link
               href="/en/auth/register"
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-500 transition-colors"
+              className="bg-indigo-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40"
             >
-              {t('auth.registerButton')}
+              Start Free Trial
             </Link>
             <Link
-              href="/en/auth/login"
-              className="border border-slate-500 text-slate-300 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-slate-700 transition-colors"
+              href="#demo"
+              className="border border-slate-500 text-slate-300 px-8 py-4 rounded-xl text-lg font-semibold hover:bg-slate-700 transition-colors"
             >
-              {t('auth.login')}
+              Watch Demo
             </Link>
           </div>
         </section>
 
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <h2 className="text-3xl font-bold text-white text-center mb-12">Özellikler</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, i) => (
-              <div key={i} className="bg-slate-800 rounded-xl p-6 border border-slate-700 hover:border-indigo-500 transition-colors">
-                <div className="text-indigo-400 mb-4">{feature.icon}</div>
-                <h3 className="text-lg font-semibold text-white mb-2">{feature.titleKey}</h3>
-                <p className="text-slate-400 text-sm">{feature.descriptionKey}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            {socialProof.map((stat, i) => (
+              <div key={i} className="text-center">
+                <div className={`text-4xl font-bold bg-gradient-to-br ${stat.color} bg-clip-text text-transparent mb-2`}>
+                  {stat.number}
+                </div>
+                <p className="text-slate-400 text-sm">{t(`landing.${stat.label}`)}</p>
               </div>
             ))}
           </div>
         </section>
+
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h2 className="text-3xl font-bold text-white text-center mb-4">
+            Why CallCrafter AI?
+          </h2>
+          <p className="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+            Everything you need to provide exceptional customer service
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {features.map((feature, i) => (
+              <div key={i} className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 hover:border-indigo-500/50 transition-all hover:shadow-lg hover:shadow-indigo-500/5 group">
+                <div className="text-indigo-400 mb-4 group-hover:scale-110 transition-transform">{feature.icon}</div>
+                <h3 className="text-lg font-semibold text-white mb-2">{t(`landing.${feature.titleKey}`)}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{t(`landing.${feature.descriptionKey}`)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h2 className="text-3xl font-bold text-white text-center mb-4">
+            Simple, Transparent Pricing
+          </h2>
+          <p className="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+            Start with a free trial. No credit card required.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {pricingPlans.map((plan, i) => (
+              <div
+                key={i}
+                className={`rounded-2xl p-8 ${
+                  plan.highlighted
+                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-400/20 scale-105'
+                    : 'bg-slate-800/50 text-slate-300 border border-slate-700'
+                }`}
+              >
+                {plan.highlighted && (
+                  <span className="text-xs font-semibold bg-white/20 px-3 py-1 rounded-full mb-4 inline-block">
+                    Most Popular
+                  </span>
+                )}
+                <h3 className="text-2xl font-bold mb-2 capitalize">{plan.name}</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-white'}`}>
+                    {plan.price}
+                  </span>
+                  <span className={plan.highlighted ? 'text-indigo-200' : 'text-slate-500'}>
+                    {plan.period}
+                  </span>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  {plan.features.map((f, j) => (
+                    <li key={j} className="flex items-center gap-2 text-sm">
+                      <svg className={`w-4 h-4 ${plan.highlighted ? 'text-indigo-200' : 'text-indigo-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/en/auth/register"
+                  className={`block text-center py-3 rounded-xl font-semibold transition-colors ${
+                    plan.highlighted
+                      ? 'bg-white text-indigo-600 hover:bg-indigo-50'
+                      : 'bg-slate-700 text-white hover:bg-slate-600'
+                  }`}
+                >
+                  Get Started
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center" id="demo">
+          <div className="bg-slate-800/50 rounded-2xl p-12 border border-slate-700">
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Ready to Transform Your Communication?
+            </h2>
+            <p className="text-slate-400 mb-8 max-w-2xl mx-auto">
+              Join thousands of businesses using CallCrafter AI to provide exceptional customer service.
+            </p>
+            <Link
+              href="/en/auth/register"
+              className="inline-block bg-indigo-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/25"
+            >
+              Start Your Free Trial
+            </Link>
+          </div>
+        </section>
       </main>
 
-      <footer className="border-t border-slate-700 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
+      <footer className="border-t border-slate-700/50 py-12">
+        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">CC</span>
+              </div>
+              <span className="text-white font-bold text-lg">CallCrafter AI</span>
+            </div>
+            <p className="text-slate-500 text-sm">AI-powered call center solution.</p>
+          </div>
+          <div>
+            <h4 className="text-white font-semibold mb-3">Product</h4>
+            <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link href="#" className="hover:text-slate-300">Features</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Pricing</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Integrations</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">API</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-white font-semibold mb-3">Company</h4>
+            <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link href="#" className="hover:text-slate-300">About</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Blog</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Careers</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Contact</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-white font-semibold mb-3">Legal</h4>
+            <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link href="#" className="hover:text-slate-300">Privacy</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Terms</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">GDPR</Link></li>
+              <li><Link href="#" className="hover:text-slate-300">Security</Link></li>
+            </ul>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 mt-8 pt-8 border-t border-slate-700/50 text-center text-slate-500 text-sm">
           &copy; {new Date().getFullYear()} CallCrafter AI. All rights reserved.
         </div>
       </footer>

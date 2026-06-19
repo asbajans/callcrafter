@@ -10,6 +10,7 @@ export const SipTrunks: CollectionConfig = {
       name: 'tenant',
       type: 'relationship',
       relationTo: 'tenants',
+      required: true,
     },
     {
       name: 'name',

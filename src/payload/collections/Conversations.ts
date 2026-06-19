@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { headers } from 'next/headers'
 
 export const Conversations: CollectionConfig = {
   slug: 'conversations',

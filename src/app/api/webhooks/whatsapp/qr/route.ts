@@ -92,9 +92,9 @@ export async function POST(req: NextRequest) {
     for (const msg of webhookData.messages) {
       if (msg.from === 'me') continue
 
-      const contactPhone = msg.remoteJid?.replace(/@s\.whatsapp\.net$/, '') || msg.from
+      const contactPhone = msg.from
 
-      const conversation = await findOrCreateConversation(account, account.tenant, contactPhone, msg.pushName)
+      const conversation = await findOrCreateConversation(account, account.tenant, contactPhone, msg.pushName, msg.remoteJid)
 
       const messageBody = msg.text ?? ''
       if (!messageBody) continue

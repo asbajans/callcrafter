@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { verifyToken } from '@/lib/auth'
 import { WhatsAppAdapter } from '@/channels/whatsapp/WhatsAppAdapter'
 import { WhatsAppQRBridgeAdapter } from '@/channels/whatsapp/WhatsAppQRBridgeAdapter'
+import { tryResolveJidFromEvolutionContact } from '@/app/api/webhooks/whatsapp/shared'
 
 async function getUser(req: NextRequest) {
   const cookieStore = await cookies()
@@ -54,10 +55,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     const sessionId = account.qrSessionId || account.id.toString()
+    let targetAddress = conversation.contactPhone
+
+    // LID-only conversations: try resolving to a real phone number
+    const isLidOnly = conversation.contactJid?.endsWith('@lid') &&
+                      conversation.contactPhone === conversation.contactJid.split('@')[0].replace(/\D/g, '')
+
+    if (isLidOnly && account.qrSessionId) {
+      const resolvedPhoneJid = await tryResolveJidFromEvolutionContact(account.qrSessionId, conversation.contactJid)
+      if (resolvedPhoneJid && resolvedPhoneJid.endsWith('@s.whatsapp.net')) {
+        const resolvedPhone = resolvedPhoneJid.split('@')[0].replace(/\D/g, '')
+        if (resolvedPhone) {
+          targetAddress = resolvedPhone
+        }
+      } else if (conversation.contactJid) {
+        targetAddress = conversation.contactJid
+      }
+    }
+
     if (data.body) {
-      sendResult = await adapter.sendText(sessionId, conversation.contactPhone, data.body)
+      sendResult = await adapter.sendText(sessionId, targetAddress, data.body)
     } else if (data.mediaUrl) {
-      sendResult = await adapter.sendMedia(sessionId, conversation.contactPhone, data.mediaType || 'image', data.mediaUrl, data.caption)
+      sendResult = await adapter.sendMedia(sessionId, targetAddress, data.mediaType || 'image', data.mediaUrl, data.caption)
     }
   }
 
@@ -70,11 +89,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   })
 
+  // Extract correct message ID based on provider/connection type
+  const whatsAppMessageId = account.connectionType === 'cloud_api'
+    ? sendResult?.messages?.[0]?.id
+    : (sendResult?.key?.id || sendResult?.messageId || '')
+
   const message = await payload.create({
     collection: 'whatsapp-messages' as any,
     data: {
       conversation: id,
-      whatsAppMessageId: sendResult?.messages?.[0]?.id,
+      whatsAppMessageId,
       direction: 'outbound',
       messageType: data.body ? 'text' : data.templateName ? 'template' : data.mediaType || 'text',
       body: data.body || data.caption || null,

@@ -10,6 +10,7 @@ export const TrainingDocs: CollectionConfig = {
       name: 'tenant',
       type: 'relationship',
       relationTo: 'tenants',
+      required: true,
     },
     {
       name: 'agent',

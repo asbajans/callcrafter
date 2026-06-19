@@ -36,7 +36,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   switch (action) {
     case 'start': {
-      const session = await adapter.startSession(sessionId)
+      const webhookUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://callcrafter.com.tr'}/api/webhooks/whatsapp/qr`
+      const session = await adapter.startSession(sessionId, webhookUrl)
       await payload.update({
         collection: 'whatsapp-accounts' as any,
         id,

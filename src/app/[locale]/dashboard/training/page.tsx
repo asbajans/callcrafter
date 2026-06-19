@@ -7,8 +7,10 @@ import {
   File, CheckCircle, Clock, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, getUser } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import config from '../../../../../payload.config';
+import { getPayload } from 'payload';
 
 const typeIcons: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -68,25 +70,46 @@ export default function TrainingPage() {
   const handleCreate = async () => {
     try {
       setSubmitting(true);
+      
+      // Validate user authentication
+      const currentUser = getUser();
+      if (!currentUser) {
+        toast.error('You must be logged in to upload documents');
+        return;
+      }
+      
+      // Validate tenant
+      if (!currentUser.tenant) {
+        toast.error('No tenant associated with your account');
+        return;
+      }
+
       const formData = new FormData();
       formData.append('name', form.name);
       formData.append('type', form.type);
       if (form.description) formData.append('description', form.description);
       if (file) formData.append('file', file);
+      formData.append('agentId', currentUser.id); // Pass current user ID as agentId
+      formData.append('tenantId', currentUser.tenant as string); // Pass tenant ID
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('callcrafter_token') : null;
       const res = await fetch('/api/training-docs', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
+        credentials: 'include', // Include cookies
       });
-      if (!res.ok) throw new Error('Upload failed');
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || 'Upload failed');
+      }
+      
       toast.success('Document uploaded successfully');
       setShowModal(false);
       setForm({ name: '', type: 'pdf', description: '' });
       setFile(null);
       await fetchData();
     } catch (err: any) {
+      console.error('Upload error:', err);
       toast.error(err.message || 'Failed to upload document');
     } finally {
       setSubmitting(false);

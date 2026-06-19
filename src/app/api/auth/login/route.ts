@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getPayload } from 'payload';
 import config from '../../../../../payload.config';
+import { SignJWT } from 'jose';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -35,16 +36,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // Return payload token for middleware to handle
+    const jwtToken = result.token;
+
     const response = NextResponse.json({
-      token: result.token,
+      token: jwtToken, // Return JWT for middleware
       user: {
         id: result.user.id,
         email: result.user.email,
         name: `${result.user.firstName || ''} ${result.user.lastName || ''}`.trim() || result.user.email,
         role: result.user.role,
+        tenant: result.user.tenant,
       },
     });
 
+    // Also set Payload token for compatibility
     response.cookies.set('payload-token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

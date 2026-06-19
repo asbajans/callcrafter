@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '../../../../../payload.config'
 import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
+import { RateLimiter } from '@/lib/rate-limiter'
+import { aiLogger } from '@/lib/logger'
 
 const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
   'gpt-4': { provider: 'openai', model: 'gpt-4' },
@@ -17,14 +19,18 @@ export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('authorization')
     const apiKey = authHeader?.replace('Bearer ', '')
     if (apiKey !== process.env.INTERNAL_API_KEY) {
+      aiLogger.warn('Unauthorized AI process attempt', { ip: req.headers.get('x-forwarded-for') || 'unknown' })
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { transcript, callSid, from, to, conversationHistory } = await req.json()
 
     if (!transcript || !callSid || !to) {
+      aiLogger.warn('Missing required fields for AI process', { callSid, hasFrom: !!from, hasTo: !!to })
       return NextResponse.json({ error: 'transcript, callSid, and to are required' }, { status: 400 })
     }
+
+    aiLogger.info('Processing AI request', { callSid, transcriptLength: transcript.length })
 
     const payload = await getPayload({ config })
 
@@ -35,6 +41,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (phoneNumbers.docs.length === 0) {
+      aiLogger.warn('Phone number not found', { to })
       return NextResponse.json({ error: 'Phone number not found' }, { status: 404 })
     }
 
@@ -42,10 +49,35 @@ export async function POST(req: NextRequest) {
     const agent = phoneNumber.forwardTo as any
 
     if (!agent) {
+      aiLogger.warn('No agent configured for number', { to })
       return NextResponse.json({ error: 'No agent configured for this number' }, { status: 404 })
     }
 
     const voice = agent.voice as any
+    const tenantId = typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant
+
+    const rateLimiter = new RateLimiter()
+    const rateCheck = await rateLimiter.checkLimit(
+      tenantId || 'default',
+      agent?.id || 'system',
+      100,
+      60_000,
+    )
+
+    if (!rateCheck.allowed) {
+      aiLogger.warn('Rate limit exceeded for AI process', { tenantId, agentId: agent.id })
+      return NextResponse.json({
+        error: 'Too many requests. Please try again later.',
+        retryAfter: Math.ceil((rateCheck.reset - Date.now()) / 1000),
+      }, {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': String(rateCheck.limit),
+          'X-RateLimit-Remaining': String(rateCheck.remaining),
+          'X-RateLimit-Reset': String(rateCheck.reset),
+        },
+      })
+    }
 
     let trainingContext = ''
     if (agent.trainingDocs && agent.trainingDocs.length > 0) {
@@ -71,11 +103,13 @@ export async function POST(req: NextRequest) {
       model: modelConfig.model,
     })
 
+    aiLogger.info('AI orchestrator processing', { callSid, agentId: agent.id, model: agent.model })
+
     const result = await orchestrator.process({
       text: transcript,
       context: {
         agentId: agent.id,
-        tenantId: typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant,
+        tenantId,
         systemPrompt: agent.systemPrompt,
         conversationHistory: conversationHistory || [],
         trainingContext,
@@ -97,7 +131,7 @@ export async function POST(req: NextRequest) {
       const newConversation = await payload.create({
         collection: 'conversations',
         data: {
-          tenant: typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant,
+          tenant: tenantId,
           agent: agent.id,
           channel: 'voice',
           externalId: callSid,
@@ -135,13 +169,16 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    aiLogger.info('AI process completed successfully', { callSid, responseLength: result.content.length })
+
     return NextResponse.json({
       response: result.content,
       voiceId: voice?.providerVoiceId || '',
       voiceSettings: voice?.settings || { stability: 0.5, similarityBoost: 0.75 },
     })
   } catch (error) {
-    console.error('AI process error:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    aiLogger.error('AI process failed', error instanceof Error ? error : undefined, { error: message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

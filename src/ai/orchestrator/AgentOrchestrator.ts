@@ -45,6 +45,20 @@ export class AgentOrchestrator {
   private provider: string;
   private model: string;
 
+  // Prompt injection detection patterns
+  private readonly INJECTION_PATTERNS = [
+    /ignore\s+(previous|above|all)\s+(instructions|prompts?|directions)/gi,
+    /forget\s+(previous|all|your)\s+(instructions|prompts?)/gi,
+    /disregard\s+(previous|all)\s+(instructions|prompts?)/gi,
+    /you\s+(are\s+)?(now|will)\s+(act\s+as|become|be)/gi,
+    /system\s*(prompt|message|instruction)/gi,
+    /override\s+(your\s+)?(instructions|prompts?|system)/gi,
+    /jailbreak/gi,
+    /new\s+(instructions|prompts?|rules)/gi,
+    /role\s*(play|play)/gi,
+    /you\s+are\s+(not\s+)?(an?\s+)?(AI|assistant|bot|chatbot)/gi,
+  ];
+
   constructor(config: {
     provider: 'openai' | 'anthropic';
     apiKey: string;
@@ -65,7 +79,17 @@ export class AgentOrchestrator {
     context: AgentContext;
     channel: string;
   }): Promise<AgentResponse> {
-    const messages = this.buildPrompt(input.context, input.text);
+    // Sanitize input and detect injection attempts
+    const sanitizedText = this.sanitizeInput(input.text);
+    if (this.detectInjection(sanitizedText)) {
+      console.warn('Prompt injection attempt detected:', sanitizedText.slice(0, 100));
+      return {
+        content: this.buildSafeResponse(input.context.systemPrompt),
+        metadata: { warning: 'Input blocked by security filter' },
+      };
+    }
+
+    const messages = this.buildPrompt(input.context, sanitizedText);
     const tools = input.context.tools.map((t) => ({
       type: 'function' as const,
       function: {
@@ -87,6 +111,29 @@ export class AgentOrchestrator {
         metadata: { error: message },
       };
     }
+  }
+
+  private sanitizeInput(text: string): string {
+    if (!text) return '';
+    // Remove null bytes and control characters
+    let sanitized = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // Truncate very long inputs
+    if (sanitized.length > 10000) {
+      sanitized = sanitized.substring(0, 10000) + ' [truncated]';
+    }
+    return sanitized;
+  }
+
+  private detectInjection(text: string): boolean {
+    return this.INJECTION_PATTERNS.some((pattern) => pattern.test(text));
+  }
+
+  private buildSafeResponse(systemPrompt: string): string {
+    // Extract first sentence of system prompt for a safe refusal
+    const firstLine = systemPrompt.split('\n')[0] || 'I am an AI assistant';
+    const roleMatch = firstLine.match(/You are (an?\s+)?(.+?)[\.!]/i);
+    const role = roleMatch ? roleMatch[2] : 'AI assistant';
+    return `I'm sorry, but I can only respond as ${role}. Please ask your question appropriately.`;
   }
 
   private async processOpenAI(

@@ -21,7 +21,7 @@ export const WhatsAppAccounts: CollectionConfig = {
     {
       name: 'phoneNumberId',
       type: 'text',
-      required: true,
+      required: false,
     },
     {
       name: 'businessAccountId',
