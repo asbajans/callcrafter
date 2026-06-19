@@ -5,12 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getPayload } from 'payload';
 import payloadConfig from '@payload-config';
-import crypto from 'crypto';
 
 const locales = ['tr', 'en'];
 const defaultLocale = 'en';
-const JWT_SECRET = Buffer.from(
-  crypto.createHash('sha256').update(process.env.PAYLOAD_SECRET || 'default-secret-change-in-production').digest()
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.PAYLOAD_SECRET || 'default-secret-change-in-production'
 );
 
 const intlMiddleware = createMiddleware({
@@ -49,30 +48,13 @@ export default async function middleware(request: NextRequest) {
     }
 
     try {
-        // Try to verify as JWT token first
-      let userId: string;
-      try {
-        const { payload: jwtPayload } = await jwtVerify(token, JWT_SECRET);
-        userId = jwtPayload.sub as string;
-        if (!userId) {
-          throw new Error('Invalid token payload');
-        }
-      } catch {
-        // If JWT verification fails, try Payload token
-        const payloadInstance = await getPayload({ config: payloadConfig });
-        const user = await payloadInstance.findByID({
-          collection: 'users',
-          id: token,
-          depth: 2,
-        });
-        if (user) {
-          userId = user.id.toString();
-        } else {
-          throw new Error('User not found');
-        }
+      const { payload: jwtPayload } = await jwtVerify(token, JWT_SECRET);
+      const userId = jwtPayload.sub as string;
+      if (!userId) {
+        throw new Error('Invalid token payload');
       }
 
-      // Get user from Payload
+      // Verify user exists in Payload
       const payloadInstance = await getPayload({ config: payloadConfig });
       const user = await payloadInstance.findByID({
         collection: 'users',
