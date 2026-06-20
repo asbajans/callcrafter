@@ -58,7 +58,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(`/${locale}/dashboard`);
+      window.location.href = `/${locale}/dashboard`;
     } catch {
       setApiError(t('common.error'));
     } finally {
