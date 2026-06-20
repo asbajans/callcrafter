@@ -18,6 +18,15 @@ const intlMiddleware = createMiddleware({
   localePrefix: 'as-needed',
 });
 
+let payloadInstance: Awaited<ReturnType<typeof getPayload>> | null = null;
+
+async function getCachedPayload() {
+  if (!payloadInstance) {
+    payloadInstance = await getPayload({ config: payloadConfig });
+  }
+  return payloadInstance;
+}
+
 const payloadPaths = ['/admin', '/api'];
 
 export default async function middleware(request: NextRequest) {
@@ -54,23 +63,25 @@ export default async function middleware(request: NextRequest) {
         throw new Error('Invalid token payload');
       }
 
-      // Verify user exists in Payload
-      const payloadInstance = await getPayload({ config: payloadConfig });
-      const user = await payloadInstance.findByID({
-        collection: 'users',
-        id: userId,
-        depth: 0,
-      });
+      (request as any).userId = userId;
 
-      if (!user) {
-        throw new Error('User not found');
+      // Payload lookup is best-effort — if DB is temporarily unavailable,
+      // still allow access (JWT is valid). User data will be fetched by page.
+      try {
+        const payload = await getCachedPayload();
+        const user = await payload.findByID({
+          collection: 'users',
+          id: userId,
+          depth: 0,
+        });
+        if (user) {
+          (request as any).user = user;
+        }
+      } catch (lookupError) {
+        console.error('Middleware user lookup failed:', lookupError);
       }
-
-      // Attach user to request for protected routes
-      (request as any).user = user;
-      
     } catch (error) {
-      // Invalid or expired token
+      // JWT verification failed — invalid or expired token
       const locale = request.cookies.get('NEXT_LOCALE')?.value || defaultLocale;
       const loginUrl = new URL(`/${locale}/auth/login`, request.url);
       loginUrl.searchParams.set('redirect', pathname);
