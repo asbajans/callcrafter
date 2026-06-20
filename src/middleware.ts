@@ -58,7 +58,7 @@ export default async function middleware(request: NextRequest) {
 
     try {
       const { payload: jwtPayload } = await jwtVerify(token, JWT_SECRET);
-      const userId = jwtPayload.sub as string;
+      const userId = (jwtPayload as any).id as string;
       if (!userId) {
         throw new Error('Invalid token payload');
       }

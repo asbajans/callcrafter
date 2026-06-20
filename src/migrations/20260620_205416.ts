@@ -8,7 +8,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_whatsapp_messages_direction') THEN CREATE TYPE "public"."enum_whatsapp_messages_direction" AS ENUM('inbound', 'outbound'); END IF; END $$;
   DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_whatsapp_messages_message_type') THEN CREATE TYPE "public"."enum_whatsapp_messages_message_type" AS ENUM('text', 'image', 'video', 'audio', 'document', 'location', 'sticker', 'template', 'interactive', 'reaction'); END IF; END $$;
   DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_whatsapp_messages_status') THEN CREATE TYPE "public"."enum_whatsapp_messages_status" AS ENUM('pending', 'sent', 'delivered', 'read', 'failed'); END IF; END $$;
-  CREATE TABLE "whatsapp_accounts" (
+  CREATE TABLE IF NOT EXISTS "whatsapp_accounts" (
   	"id" serial PRIMARY KEY NOT NULL,
   	"tenant_id" integer NOT NULL,
   	"name" varchar NOT NULL,
@@ -27,7 +27,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   	"created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
   );
   
-  CREATE TABLE "whatsapp_conversations" (
+  CREATE TABLE IF NOT EXISTS "whatsapp_conversations" (
   	"id" serial PRIMARY KEY NOT NULL,
   	"account_id" integer NOT NULL,
   	"tenant_id" integer NOT NULL,
@@ -46,7 +46,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   	"created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
   );
   
-  CREATE TABLE "whatsapp_messages" (
+  CREATE TABLE IF NOT EXISTS "whatsapp_messages" (
   	"id" serial PRIMARY KEY NOT NULL,
   	"conversation_id" integer NOT NULL,
   	"whats_app_message_id" varchar,

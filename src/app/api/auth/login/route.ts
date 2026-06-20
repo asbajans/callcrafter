@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getPayload } from 'payload';
 import config from '../../../../../payload.config';
-import { SignJWT } from 'jose';
-
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
