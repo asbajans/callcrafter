@@ -59,7 +59,7 @@ export default async function middleware(request: NextRequest) {
       const user = await payloadInstance.findByID({
         collection: 'users',
         id: userId,
-        depth: 2,
+        depth: 0,
       });
 
       if (!user) {
