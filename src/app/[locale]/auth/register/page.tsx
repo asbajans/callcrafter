@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -22,8 +22,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
   const t = useTranslations();
   const router = useRouter();
-  const params = useParams();
-  const locale = params.locale as string;
+  const locale = useLocale();
   const [form, setForm] = useState<RegisterForm>({
     name: '', email: '', password: '', confirmPassword: '', tenantName: '',
   });

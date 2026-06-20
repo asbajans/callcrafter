@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -16,8 +16,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const t = useTranslations();
   const router = useRouter();
-  const params = useParams();
-  const locale = params.locale as string;
+  const locale = useLocale();
   const [form, setForm] = useState<LoginForm>({ email: '', password: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginForm, string>>>({});
   const [apiError, setApiError] = useState('');
