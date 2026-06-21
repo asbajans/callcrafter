@@ -130,7 +130,7 @@ TWILIO_AUTH_TOKEN=...
 | `DOCKER_PASSWORD`          | Docker Hub password/token            |
 | `PORTAINER_URL`            | Portainer URL                        |
 | `PORTAINER_API_KEY`        | Portainer API key                    |
-| `PORTAINER_STACK_NAME`     | callcrafter                          |
+| `PORTAINER_STACK_NAME`     | callcrafterai                        |
 
 ### Cloudflare Tunnel Config
 ```
