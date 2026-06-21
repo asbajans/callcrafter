@@ -68,38 +68,38 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   
   ALTER TABLE "sip_trunks" ALTER COLUMN "tenant_id" SET NOT NULL;
   ALTER TABLE "training_docs" ALTER COLUMN "tenant_id" SET NOT NULL;
-  ALTER TABLE "messages" ADD COLUMN "tenant_id" integer NOT NULL;
-  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN "whatsapp_accounts_id" integer;
-  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN "whatsapp_conversations_id" integer;
-  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN "whatsapp_messages_id" integer;
-  ALTER TABLE "whatsapp_accounts" ADD CONSTRAINT "whatsapp_accounts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT "whatsapp_conversations_account_id_whatsapp_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."whatsapp_accounts"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT "whatsapp_conversations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT "whatsapp_conversations_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT "whatsapp_conversations_assigned_to_id_users_id_fk" FOREIGN KEY ("assigned_to_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_conversation_id_whatsapp_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."whatsapp_conversations"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_sent_by_id_users_id_fk" FOREIGN KEY ("sent_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
-  CREATE INDEX "whatsapp_accounts_tenant_idx" ON "whatsapp_accounts" USING btree ("tenant_id");
-  CREATE INDEX "whatsapp_accounts_updated_at_idx" ON "whatsapp_accounts" USING btree ("updated_at");
-  CREATE INDEX "whatsapp_accounts_created_at_idx" ON "whatsapp_accounts" USING btree ("created_at");
-  CREATE INDEX "whatsapp_conversations_account_idx" ON "whatsapp_conversations" USING btree ("account_id");
-  CREATE INDEX "whatsapp_conversations_tenant_idx" ON "whatsapp_conversations" USING btree ("tenant_id");
-  CREATE INDEX "whatsapp_conversations_agent_idx" ON "whatsapp_conversations" USING btree ("agent_id");
-  CREATE INDEX "whatsapp_conversations_assigned_to_idx" ON "whatsapp_conversations" USING btree ("assigned_to_id");
-  CREATE INDEX "whatsapp_conversations_updated_at_idx" ON "whatsapp_conversations" USING btree ("updated_at");
-  CREATE INDEX "whatsapp_conversations_created_at_idx" ON "whatsapp_conversations" USING btree ("created_at");
-  CREATE INDEX "whatsapp_messages_conversation_idx" ON "whatsapp_messages" USING btree ("conversation_id");
-  CREATE INDEX "whatsapp_messages_sent_by_idx" ON "whatsapp_messages" USING btree ("sent_by_id");
-  CREATE INDEX "whatsapp_messages_updated_at_idx" ON "whatsapp_messages" USING btree ("updated_at");
-  CREATE INDEX "whatsapp_messages_created_at_idx" ON "whatsapp_messages" USING btree ("created_at");
-  ALTER TABLE "messages" ADD CONSTRAINT "messages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
-  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT "payload_locked_documents_rels_whatsapp_accounts_fk" FOREIGN KEY ("whatsapp_accounts_id") REFERENCES "public"."whatsapp_accounts"("id") ON DELETE cascade ON UPDATE no action;
-  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT "payload_locked_documents_rels_whatsapp_conversations_fk" FOREIGN KEY ("whatsapp_conversations_id") REFERENCES "public"."whatsapp_conversations"("id") ON DELETE cascade ON UPDATE no action;
-  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT "payload_locked_documents_rels_whatsapp_messages_fk" FOREIGN KEY ("whatsapp_messages_id") REFERENCES "public"."whatsapp_messages"("id") ON DELETE cascade ON UPDATE no action;
-  CREATE INDEX "messages_tenant_idx" ON "messages" USING btree ("tenant_id");
-  CREATE INDEX "payload_locked_documents_rels_whatsapp_accounts_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_accounts_id");
-  CREATE INDEX "payload_locked_documents_rels_whatsapp_conversations_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_conversations_id");
-  CREATE INDEX "payload_locked_documents_rels_whatsapp_messages_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_messages_id");`)
+  ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "tenant_id" integer NOT NULL;
+  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN IF NOT EXISTS "whatsapp_accounts_id" integer;
+  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN IF NOT EXISTS "whatsapp_conversations_id" integer;
+  ALTER TABLE "payload_locked_documents_rels" ADD COLUMN IF NOT EXISTS "whatsapp_messages_id" integer;
+  ALTER TABLE "whatsapp_accounts" ADD CONSTRAINT IF NOT EXISTS "whatsapp_accounts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT IF NOT EXISTS "whatsapp_conversations_account_id_whatsapp_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."whatsapp_accounts"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT IF NOT EXISTS "whatsapp_conversations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT IF NOT EXISTS "whatsapp_conversations_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT IF NOT EXISTS "whatsapp_conversations_assigned_to_id_users_id_fk" FOREIGN KEY ("assigned_to_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_messages" ADD CONSTRAINT IF NOT EXISTS "whatsapp_messages_conversation_id_whatsapp_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."whatsapp_conversations"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "whatsapp_messages" ADD CONSTRAINT IF NOT EXISTS "whatsapp_messages_sent_by_id_users_id_fk" FOREIGN KEY ("sent_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+  CREATE INDEX IF NOT EXISTS "whatsapp_accounts_tenant_idx" ON "whatsapp_accounts" USING btree ("tenant_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_accounts_updated_at_idx" ON "whatsapp_accounts" USING btree ("updated_at");
+  CREATE INDEX IF NOT EXISTS "whatsapp_accounts_created_at_idx" ON "whatsapp_accounts" USING btree ("created_at");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_account_idx" ON "whatsapp_conversations" USING btree ("account_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_tenant_idx" ON "whatsapp_conversations" USING btree ("tenant_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_agent_idx" ON "whatsapp_conversations" USING btree ("agent_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_assigned_to_idx" ON "whatsapp_conversations" USING btree ("assigned_to_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_updated_at_idx" ON "whatsapp_conversations" USING btree ("updated_at");
+  CREATE INDEX IF NOT EXISTS "whatsapp_conversations_created_at_idx" ON "whatsapp_conversations" USING btree ("created_at");
+  CREATE INDEX IF NOT EXISTS "whatsapp_messages_conversation_idx" ON "whatsapp_messages" USING btree ("conversation_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_messages_sent_by_idx" ON "whatsapp_messages" USING btree ("sent_by_id");
+  CREATE INDEX IF NOT EXISTS "whatsapp_messages_updated_at_idx" ON "whatsapp_messages" USING btree ("updated_at");
+  CREATE INDEX IF NOT EXISTS "whatsapp_messages_created_at_idx" ON "whatsapp_messages" USING btree ("created_at");
+  ALTER TABLE "messages" ADD CONSTRAINT IF NOT EXISTS "messages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT IF NOT EXISTS "payload_locked_documents_rels_whatsapp_accounts_fk" FOREIGN KEY ("whatsapp_accounts_id") REFERENCES "public"."whatsapp_accounts"("id") ON DELETE cascade ON UPDATE no action;
+  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT IF NOT EXISTS "payload_locked_documents_rels_whatsapp_conversations_fk" FOREIGN KEY ("whatsapp_conversations_id") REFERENCES "public"."whatsapp_conversations"("id") ON DELETE cascade ON UPDATE no action;
+  ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT IF NOT EXISTS "payload_locked_documents_rels_whatsapp_messages_fk" FOREIGN KEY ("whatsapp_messages_id") REFERENCES "public"."whatsapp_messages"("id") ON DELETE cascade ON UPDATE no action;
+  CREATE INDEX IF NOT EXISTS "messages_tenant_idx" ON "messages" USING btree ("tenant_id");
+  CREATE INDEX IF NOT EXISTS "payload_locked_documents_rels_whatsapp_accounts_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_accounts_id");
+  CREATE INDEX IF NOT EXISTS "payload_locked_documents_rels_whatsapp_conversations_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_conversations_id");
+  CREATE INDEX IF NOT EXISTS "payload_locked_documents_rels_whatsapp_messages_id_idx" ON "payload_locked_documents_rels" USING btree ("whatsapp_messages_id");`)
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
