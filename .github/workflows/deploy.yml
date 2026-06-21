@@ -38,40 +38,13 @@ jobs:
             asbajans/callcrafter-ws:latest
             asbajans/callcrafter-ws:${{ github.sha }}
 
-      - name: Trigger Portainer redeploy (git stack)
-        env:
-          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          STACK_NAME: ${{ secrets.PORTAINER_STACK_NAME }}
+      - name: Trigger Portainer redeploy (webhook)
         run: |
-          ENDPOINT_ID=$(python3 -c "
-          import urllib.request, json
-          req = urllib.request.Request('$PORTAINER_URL/api/endpoints')
-          req.add_header('Authorization', 'Bearer $PORTAINER_API_KEY')
-          data = json.loads(urllib.request.urlopen(req).read())
-          print(data[0]['Id'])
-          ")
-          echo "Endpoint: $ENDPOINT_ID"
-
-          STACK_ID=$(python3 -c "
-          import urllib.request, json
-          req = urllib.request.Request('$PORTAINER_URL/api/stacks')
-          req.add_header('Authorization', 'Bearer $PORTAINER_API_KEY')
-          data = json.loads(urllib.request.urlopen(req).read())
-          stack = [s for s in data if s['Name'] == '$STACK_NAME'][0]
-          print(stack['Id'])
-          ")
-          echo "Stack ID: $STACK_ID"
-
-          echo "Triggering redeploy..."
           for i in 1 2; do
             RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-              "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" \
-              -H "Authorization: Bearer $PORTAINER_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d '{"env":[],"prune":true,"repositoryReferenceName":"refs/heads/master"}')
+              "${{ secrets.PORTAINER_WEBHOOK_URL }}")
             echo "Attempt $i: HTTP $RESP"
-            if [ "$RESP" = "200" ]; then
+            if [ "$RESP" = "200" ] || [ "$RESP" = "204" ]; then
               echo "Redeploy triggered successfully"
               break
             fi
