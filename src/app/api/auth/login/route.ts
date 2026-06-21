@@ -49,9 +49,10 @@ export async function POST(request: Request) {
     });
 
     // Also set Payload token for compatibility
+    const isHttps = request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https://');
     response.cookies.set('payload-token', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
