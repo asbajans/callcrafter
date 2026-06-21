@@ -115,6 +115,7 @@ services:
       AUTHENTICATION_TYPE: apikey
       AUTHENTICATION_API_KEY: ${WA_BRIDGE_API_KEY}
       DATABASE_ENABLED: true
+      DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: ${DATABASE_URI}?schema=evolution
     depends_on:
       postgres:
