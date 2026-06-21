@@ -1,21 +1,14 @@
-name: Deploy to Portainer
+name: Deploy
 
 on:
   push:
-    branches:
-      - master
-
-env:
-  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/callcrafter
-  WS_DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/callcrafter-ws
+    branches: [master]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -26,114 +19,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract commit SHA
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build and push app
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ${{ env.DOCKER_IMAGE }}:latest
-            ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            asbajans/callcrafter:latest
+            asbajans/callcrafter:${{ github.sha }}
 
-      - name: Build and push ws-server Docker image
-        uses: docker/build-push-action@v5
+      - name: Build and push ws-server
+        uses: docker/build-push-action@v6
         with:
-          context: ./ws-server
+          context: ws-server
+          file: ws-server/Dockerfile
           push: true
           tags: |
-            ${{ env.WS_DOCKER_IMAGE }}:latest
-            ${{ env.WS_DOCKER_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            asbajans/callcrafter-ws:latest
+            asbajans/callcrafter-ws:${{ github.sha }}
 
-      - name: Deploy to Portainer
-        env:
-          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          PORTAINER_STACK_NAME: ${{ secrets.PORTAINER_STACK_NAME }}
-          DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
-          WS_DOCKER_IMAGE: ${{ env.WS_DOCKER_IMAGE }}
-          DOCKER_TAG: ${{ steps.vars.outputs.sha_short }}
-        run: |
-          set -e
-
-          # --- Helpers ---
-          portainer_get() {
-            curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$@"
-          }
-          portainer_put() {
-            HTTP_CODE=$(curl -sS -o /tmp/response.json -w "%{http_code}" \
-              -X PUT -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" "$@")
-            echo "HTTP $HTTP_CODE"
-            # 524 = Cloudflare origin timeout; the deploy likely succeeded on Portainer side
-            if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "524" ]; then
-              cat /tmp/response.json 2>/dev/null || true
-              return 1
-            fi
-          }
-          portainer_post() {
-            curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" "$@"
-          }
-
-          # --- Find endpoint ---
-          echo "--- Fetching endpoint ---"
-          ENDPOINT_ID=$(portainer_get "$PORTAINER_URL/api/endpoints" | jq -r '.[] | select(.Type == 1) | .Id' | head -1)
-          if [ -z "$ENDPOINT_ID" ] || [ "$ENDPOINT_ID" = "null" ]; then
-            echo "ERROR: No valid endpoint found" >&2; exit 1
-          fi
-          echo "Endpoint: $ENDPOINT_ID"
-
-          # --- Find stack ---
-          echo "--- Fetching stack ---"
-          STACK_ID=$(portainer_get "$PORTAINER_URL/api/stacks" | \
-            jq -r --arg name "$PORTAINER_STACK_NAME" '.[] | select(.Name == $name) | .Id')
-          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
-            echo "ERROR: Stack '$PORTAINER_STACK_NAME' not found" >&2; exit 1
-          fi
-          echo "Stack ID: $STACK_ID"
-
-          # --- Fetch full stack detail ---
-          echo "--- Fetching stack detail ---"
-          STACK_DETAIL=$(portainer_get "$PORTAINER_URL/api/stacks/$STACK_ID") || \
-            { echo "ERROR: Failed to fetch stack" >&2; exit 1; }
-          CURRENT_ENV=$(echo "$STACK_DETAIL" | jq -c '.Env // []')
-          HAS_GIT=$(echo "$STACK_DETAIL" | jq 'has("GitConfig") and .GitConfig != null')
-          echo "Env vars: $(echo "$CURRENT_ENV" | jq 'length'), Has GitConfig: $HAS_GIT"
-
-          # --- Build updated env vars with DOCKER_TAG ---
-          UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
-            --arg tag "$DOCKER_TAG" \
-            'map(if .name == "DOCKER_TAG" then .value = $tag else . end) + if any(.name == "DOCKER_TAG") then [] else [{"name":"DOCKER_TAG","value":$tag}] end')
-
-          # --- Deploy based on mode ---
-          if [ "$HAS_GIT" = "true" ]; then
-            echo "--- Repository mode: redeploying from git ---"
-            portainer_post \
-              -d "$(jq -n --argjson env "$UPDATED_ENV" '{Env: $env, Prune: true}')" \
-              "$PORTAINER_URL/api/stacks/$STACK_ID/git/redeploy?endpointId=$ENDPOINT_ID" || \
-              { echo "ERROR: Git redeploy failed" >&2; exit 1; }
-            echo "--- Redeploy triggered ---"
-          else
-            echo "--- Web Editor mode: updating stack file ---"
-            STACK_FILE_RESP=$(portainer_get "$PORTAINER_URL/api/stacks/$STACK_ID/file") || \
-              { echo "ERROR: Failed to fetch stack file" >&2; exit 1; }
-            echo "$STACK_FILE_RESP" | jq -r '.StackFileContent' > /tmp/stack.yml
-            echo "Updating image tags to $DOCKER_TAG..."
-            sed -i \
-              "s|image: .*/callcrafter:.*|image: $DOCKER_IMAGE:$DOCKER_TAG|g; \
-               s|image: .*/callcrafter-ws:.*|image: $WS_DOCKER_IMAGE:$DOCKER_TAG|g" \
-              /tmp/stack.yml
-            # Single PUT with Prune — triggers redeploy.
-            # 524 = Cloudflare origin timeout (redeploy takes >100s).
-            # The operation continues on Portainer side even if response times out.
-            portainer_put \
-              -d "$(jq -n \
-                --rawfile stackFileContent /tmp/stack.yml \
-                --argjson env "$UPDATED_ENV" \
-                '{StackFileContent: $stackFileContent, Env: $env, Prune: true}')" \
-              "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" || \
-              { echo "ERROR: Failed to save stack file" >&2; exit 1; }
-            echo "--- Stack updated and redeploy triggered (check Portainer) ---"
-          fi
+      - name: Trigger Portainer redeploy
+        run: curl -sS -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
