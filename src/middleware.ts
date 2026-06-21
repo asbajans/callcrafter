@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 
+import crypto from 'crypto';
 import createMiddleware from 'next-intl/middleware';
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
@@ -9,7 +10,7 @@ import payloadConfig from '@payload-config';
 const locales = ['tr', 'en'];
 const defaultLocale = 'en';
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.PAYLOAD_SECRET || 'default-secret-change-in-production'
+  crypto.createHash('sha256').update(process.env.PAYLOAD_SECRET || 'default-secret-change-in-production').digest('hex').slice(0, 32)
 );
 
 const intlMiddleware = createMiddleware({
