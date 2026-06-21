@@ -1,6 +1,10 @@
+import crypto from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 
-const secret = new TextEncoder().encode(process.env.PAYLOAD_SECRET || 'fallback-secret');
+const rawSecret = process.env.PAYLOAD_SECRET || 'fallback-secret';
+const secret = new TextEncoder().encode(
+  crypto.createHash('sha256').update(rawSecret).digest('hex').slice(0, 32)
+);
 
 export interface JWTPayload {
   userId: string;

@@ -10,7 +10,7 @@ const navItems = [
   { href: '', labelKey: 'overview', icon: 'LayoutDashboard' },
   { href: 'agents', labelKey: 'agents', icon: 'Bot' },
   { href: 'phone', labelKey: 'phone', icon: 'Phone' },
-  { href: 'whatsapp', labelKey: 'WhatsApp', icon: 'MessageCircle' },
+  { href: 'whatsapp', labelKey: 'whatsapp', icon: 'MessageCircle' },
   { href: 'trunk', labelKey: 'trunk', icon: 'Network' },
   { href: 'training', labelKey: 'training', icon: 'FileText' },
   { href: 'conversations', labelKey: 'conversations', icon: 'MessageSquare' },
@@ -110,6 +110,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const params = useParams();
   const locale = params.locale as string;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<{ id: number; email: string; firstName?: string; lastName?: string; role: string; tenant?: any } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => setUser(u))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     analytics.track('page_view', { path: pathname, locale });
@@ -211,11 +219,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="flex items-center gap-3 hover:bg-white/[0.04] rounded-lg px-1 py-1 transition-colors group"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
-              <span className="text-white text-xs font-bold">A</span>
+              <span className="text-white text-xs font-bold">
+                {user ? (user.firstName?.[0] || user.email[0]).toUpperCase() : '?'}
+              </span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-200 truncate group-hover:text-white transition-colors">Admin</p>
-              <p className="text-xs text-slate-500 truncate">admin@callcrafter.com</p>
+              <p className="text-sm font-medium text-slate-200 truncate group-hover:text-white transition-colors">
+                {user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email : '...'}
+              </p>
+              <p className="text-xs text-slate-500 truncate">{user?.email || '...'}</p>
             </div>
             <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -312,9 +324,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
 
               {/* Avatar */}
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-sm">A</span>
-              </div>
+              <Link
+                href={`/${locale}/dashboard/settings`}
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg hover:opacity-80 transition-opacity"
+              >
+                <span className="text-white font-bold text-sm">
+                  {user ? (user.firstName?.[0] || user.email[0]).toUpperCase() : '?'}
+                </span>
+              </Link>
             </div>
           </div>
         </header>
