@@ -58,10 +58,13 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error) {
-    console.error('Login error:', error);
+  } catch (error: any) {
+    console.error('Login error:', error?.message || error, 'Stack:', error?.stack);
     return NextResponse.json(
-      { error: 'Invalid email or password' },
+      {
+        error: error?.message || 'Invalid email or password',
+        type: error?.constructor?.name || typeof error,
+      },
       { status: 401 }
     );
   }
