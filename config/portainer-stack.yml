@@ -117,9 +117,12 @@ services:
       DATABASE_ENABLED: true
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: ${DATABASE_URI}?schema=evolution
+      REDIS_URI: redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - callcrafter_network
 
