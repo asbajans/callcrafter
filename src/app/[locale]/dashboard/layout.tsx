@@ -7,7 +7,7 @@ import { useParams, usePathname } from 'next/navigation';
 import { analytics } from '@/lib/analytics';
 
 const navItems = [
-  { href: 'overview', labelKey: 'overview', icon: 'LayoutDashboard' },
+  { href: '', labelKey: 'overview', icon: 'LayoutDashboard' },
   { href: 'agents', labelKey: 'agents', icon: 'Bot' },
   { href: 'phone', labelKey: 'phone', icon: 'Phone' },
   { href: 'whatsapp', labelKey: 'WhatsApp', icon: 'MessageCircle' },
@@ -124,8 +124,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const segments = pathname.split('/');
     const last = segments[segments.length - 1];
     // overview is the index page
-    if (href === 'overview') {
-      return last === 'overview' || last === 'dashboard';
+    if (href === '') {
+      return last === 'dashboard' || last === '';
     }
     return pathname.includes(`/dashboard/${href}`);
   };
@@ -159,7 +159,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             return (
               <Link
                 key={item.href}
-                href={`/${locale}/dashboard/${item.href}`}
+                href={item.href ? `/${locale}/dashboard/${item.href}` : `/${locale}/dashboard`}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                   active
                     ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -205,16 +205,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* User footer */}
-        <div className="border-t border-white/[0.06] px-4 py-4 shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="border-t border-white/[0.06] px-4 py-4 shrink-0 space-y-2">
+          <Link
+            href={`/${locale}/dashboard/settings`}
+            className="flex items-center gap-3 hover:bg-white/[0.04] rounded-lg px-1 py-1 transition-colors group"
+          >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
               <span className="text-white text-xs font-bold">A</span>
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-200 truncate">Admin</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-200 truncate group-hover:text-white transition-colors">Admin</p>
               <p className="text-xs text-slate-500 truncate">admin@callcrafter.com</p>
             </div>
-          </div>
+            <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </Link>
+
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' });
+              window.location.href = `/${locale}/auth/login`;
+            }}
+            className="flex items-center gap-3 w-full px-1 py-1.5 rounded-lg text-sm text-slate-500 hover:text-red-400 hover:bg-red-950/20 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+            </svg>
+            {t('auth.logout')}
+          </button>
         </div>
       </aside>
 
@@ -250,7 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
                 <span className="text-slate-300 font-medium capitalize">
-                  {pathname.split('/').pop()?.replace('-', ' ') || 'Overview'}
+                  {pathname.split('/').filter(Boolean).pop()?.replace('-', ' ') || t('dashboard.overview')}
                 </span>
               </div>
 
@@ -260,19 +279,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-2">
               {/* Language switcher */}
               <div className="flex items-center gap-1 text-xs bg-white/[0.05] border border-white/[0.08] px-2.5 py-1.5 rounded-lg">
-                <Link
-                  href={`/tr/dashboard/${pathname.split('/').pop() || 'overview'}`}
+                <button
+                  onClick={() => {
+                    const segments = pathname.split('/').filter(Boolean);
+                    if (segments[0] === 'tr') return;
+                    segments[0] = 'tr';
+                    window.location.href = '/' + segments.join('/');
+                  }}
                   className={`font-medium transition-colors px-1 ${locale === 'tr' ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
                 >
                   TR
-                </Link>
+                </button>
                 <span className="text-slate-700">|</span>
-                <Link
-                  href={`/en/dashboard/${pathname.split('/').pop() || 'overview'}`}
+                <button
+                  onClick={() => {
+                    const segments = pathname.split('/').filter(Boolean);
+                    if (segments[0] === 'en') return;
+                    segments[0] = 'en';
+                    window.location.href = '/' + segments.join('/');
+                  }}
                   className={`font-medium transition-colors px-1 ${locale === 'en' ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
                 >
                   EN
-                </Link>
+                </button>
               </div>
 
               {/* Notification bell */}
