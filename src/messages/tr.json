@@ -16,11 +16,13 @@
     "overview": "Genel Bakış",
     "agents": "AI Asistanlar",
     "phone": "Telefon Numaraları",
+    "whatsapp": "WhatsApp",
     "trunk": "SIP Bağlantıları",
     "training": "Eğitim Dokümanları",
     "conversations": "Konuşmalar",
     "billing": "Faturalandırma",
-    "settings": "Ayarlar"
+    "settings": "Ayarlar",
+    "integrations": "Entegrasyonlar"
   },
   "admin": {
     "title": "Süper Admin",

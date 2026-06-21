@@ -16,11 +16,13 @@
     "overview": "Overview",
     "agents": "AI Agents",
     "phone": "Phone Numbers",
+    "whatsapp": "WhatsApp",
     "trunk": "SIP Trunks",
     "training": "Training Documents",
     "conversations": "Conversations",
     "billing": "Billing",
-    "settings": "Settings"
+    "settings": "Settings",
+    "integrations": "Integrations"
   },
   "admin": {
     "title": "Super Admin",

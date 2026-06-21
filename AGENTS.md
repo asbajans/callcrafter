@@ -81,6 +81,7 @@ Twilio → POST /twilio/voice (ws-server :8080)
 - ESLint pinned to v8.57.1 (`eslint-config-next` requires v8)
 - Lint step removed from test.yml (`next build` already validates)
 - Deploy workflow uses Docker Buildx → Docker Hub → Portainer API
+- Deploy workflow triggers on push to master; uses Portainer webhook for redeploy
 - Test workflow: `npm install --legacy-peer-deps` → `npm run typecheck` → `npm run build`
 
 ### TypeScript
@@ -92,6 +93,36 @@ Twilio → POST /twilio/voice (ws-server :8080)
 - ws-server WS_WS_PORT=8080 (attached to HTTP server, not separate)
 - Container names: `ws-server` (consistent naming)
 - Postgres password: `postcall1212*`
+
+### JWT & Auth Fixes (21 June 2026)
+- **CRITICAL**: Payload hashes `PAYLOAD_SECRET` with SHA-256 (first 32 hex chars) before JWT signing (`node_modules/payload/dist/index.js:321`). Both `src/middleware.ts` and `src/lib/auth.ts` must use the same hashed secret for JWT verification — fixed in both files.
+- `src/lib/auth.ts`: Added `crypto.createHash('sha256').update(rawSecret).digest('hex').slice(0, 32)` for JWT verification.
+- `src/middleware.ts`: Same hash applied to `JWT_SECRET` constant.
+- `src/app/api/auth/me/route.ts`: New endpoint — returns current user from JWT cookie (used by dashboard layout to display real user info).
+- `src/app/api/auth/logout/route.ts`: New endpoint — clears `payload-token` cookie.
+- Cookie `secure` flag is now dynamic based on `x-forwarded-proto` header (was hardcoded to `true`, blocking HTTP access).
+- Login route returns actual error message in debug mode for troubleshooting.
+
+### Migration Fixes (21 June 2026)
+- Migration `20260620_205416` made fully idempotent:
+  - `CREATE TYPE` wrapped in `DO $$ IF NOT EXISTS ...`
+  - `CREATE TABLE` uses `CREATE TABLE IF NOT EXISTS`
+  - `ADD COLUMN` uses `ADD COLUMN IF NOT EXISTS`
+  - `ADD CONSTRAINT` uses `ADD CONSTRAINT IF NOT EXISTS`
+  - `CREATE INDEX` uses `CREATE INDEX IF NOT EXISTS`
+- Migration failure is non-fatal; server starts regardless.
+
+### Dashboard Fixes (21 June 2026)
+- **Overview link**: Changed from `/dashboard/overview` (404) to `/dashboard`.
+- **Logout button**: Added to sidebar user footer — sends POST `/api/auth/logout`, clears cookie, redirects to login.
+- **User profile**: Sidebar avatar now links to Settings page. Header avatar is also clickable.
+- **Dynamic user info**: Sidebar fetches `/api/auth/me` to display real user name/email/initial.
+- **Language switcher**: Rewritten to use `window.location.pathname` with regex replace (was stripping `/dashboard/` from path).
+- **WhatsApp nav label**: Changed from `labelKey: 'WhatsApp'` to `labelKey: 'whatsapp'` to match translation key convention.
+- **Integrations page**: Added at `/dashboard/integrations` with Instagram, Facebook, CRM, Calendar connection cards.
+
+### Landing Page Fix (21 June 2026)
+- Login/register links in `src/app/[locale]/page.tsx` changed from string `"/${locale}/auth/..."` to template literal `` `/${locale}/auth/...` `` (was rendering literal `${locale}` instead of the variable).
 
 ## Deployment Status (11 June 2026)
 - Build: ✅ `npm run build` passes (0 errors)
@@ -121,6 +152,9 @@ ZADARMA_API_KEY=...
 ZADARMA_SECRET=...
 TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
+WA_BRIDGE_API_KEY=<shared with evolution-api>
+WA_BRIDGE_WEBHOOK_SECRET=<for QR bridge webhooks>
+WHATSAPP_CONTEXT_RESET_MINUTES=30
 ```
 
 ### GitHub Secrets
@@ -149,14 +183,15 @@ CallCrafter/
 │   │   │   └── api/          # /api/* (Payload REST)
 │   │   ├── api/              # Custom routes
 │   │   │   ├── ai/process/   # POST /api/ai/process
-│   │   │   ├── auth/         # login, register
+│   │   │   ├── auth/         # login, register, logout, me
 │   │   │   ├── calls/        # call initiation
 │   │   │   ├── twilio/       # outbound TwiML
-│   │   │   └── webhooks/     # Stripe, WhatsApp, Instagram, Zadarma
+│   │   │   ├── webhooks/     # Stripe, WhatsApp, Instagram, Zadarma
+│   │   │   └── whatsapp/     # WhatsApp accounts, conversations, messages, QR
 │   │   ├── [locale]/         # User pages (TR/EN)
 │   │   │   ├── page.tsx      # Landing
 │   │   │   ├── auth/         # Login, Register
-│   │   │   ├── dashboard/    # Overview, Agents, Phone, Trunk, Conversations, Training, Billing, Settings
+│   │   │   ├── dashboard/    # Overview, Agents, Phone, Trunk, WhatsApp, Conversations, Training, Billing, Settings, Integrations
 │   │   │   └── admin/        # Super Admin: Users, Payments, Providers, System
 │   │   └── lib/              # Shared utilities (api.ts, auth.ts, i18n.ts, utils.ts)
 │   ├── ai/
@@ -187,23 +222,26 @@ CallCrafter/
 
 ## Payload Collections (15)
 
-| Collection        | Slug              | Purpose                        |
-|-------------------|-------------------|--------------------------------|
-| Users             | users             | Auth + roles                   |
-| Tenants           | tenants           | Multi-tenant isolation         |
-| Agents            | agents            | AI agent config                |
-| VoiceConfigs      | voice-configs     | Voice DB (ElevenLabs IDs)      |
-| PhoneNumbers      | phone-numbers     | Phone → agent mapping          |
-| ProviderConfigs   | provider-configs  | Twilio/Zadarma config          |
-| SipTrunks         | sip-trunks        | Bring-your-own SIP trunk       |
-| Conversations     | conversations     | Call records                   |
-| Messages          | messages          | Transcripts                    |
-| TrainingDocs      | training-docs     | RAG training documents         |
-| PricingPlans      | pricing-plans     | Subscription tiers             |
-| Subscriptions     | subscriptions     | Tenant subscription status     |
-| Payments          | payments          | Stripe records                 |
-| WebhookLogs       | webhook-logs      | Incoming webhooks              |
-| Media             | media             | File uploads                   |
+| Collection            | Slug                    | Purpose                        |
+|-----------------------|-------------------------|--------------------------------|
+| Users                 | users                   | Auth + roles                   |
+| Tenants               | tenants                 | Multi-tenant isolation         |
+| Agents                | agents                  | AI agent config                |
+| VoiceConfigs          | voice-configs           | Voice DB (ElevenLabs IDs)      |
+| PhoneNumbers          | phone-numbers           | Phone → agent mapping          |
+| ProviderConfigs       | provider-configs        | Twilio/Zadarma config          |
+| SipTrunks             | sip-trunks              | Bring-your-own SIP trunk       |
+| Conversations         | conversations           | Call records                   |
+| Messages              | messages                | Transcripts                    |
+| TrainingDocs          | training-docs           | RAG training documents         |
+| PricingPlans          | pricing-plans           | Subscription tiers             |
+| Subscriptions         | subscriptions           | Tenant subscription status     |
+| Payments              | payments                | Stripe records                 |
+| WebhookLogs           | webhook-logs            | Incoming webhooks              |
+| Media                 | media                   | File uploads                   |
+| WhatsAppAccounts      | whatsapp-accounts       | WhatsApp Cloud API / QR Bridge |
+| WhatsAppConversations | whatsapp-conversations  | WhatsApp message threads       |
+| WhatsAppMessages      | whatsapp-messages       | Individual WhatsApp messages   |
 
 ## Conventions
 
