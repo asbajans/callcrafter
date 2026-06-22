@@ -38,49 +38,60 @@ export class WhatsAppQRBridgeAdapter {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      console.error(`[QR Adapter] API error ${method} ${path}: ${response.status} ${errorBody}`);
       throw new Error(`QR Bridge API error (${response.status}): ${errorBody}`);
     }
 
-    return response.json() as Promise<T>;
+    const data = await response.json();
+    console.log(`[QR Adapter] ${method} ${path} response:`, JSON.stringify(data).slice(0, 500));
+    return data as T;
   }
 
   async startSession(sessionId: string, webhookUrl?: string): Promise<QrSessionInfo & { qrImageUrl?: string }> {
     // 1) Delete any existing instance first to ensure fresh QR
     try {
+      console.log(`[QR Adapter] Deleting existing instance ${sessionId}`);
       await this.request('DELETE', `instance/delete/${sessionId}`);
       await new Promise((resolve) => setTimeout(resolve, 1000));
+      console.log(`[QR Adapter] Instance ${sessionId} deleted`);
     } catch {
-      // ignore — instance may not exist
+      console.log(`[QR Adapter] No existing instance to delete (or delete failed) for ${sessionId}`);
     }
 
     // 2) POST /instance/create
+    console.log(`[QR Adapter] Creating instance ${sessionId}`);
     await this.request('POST', 'instance/create', {
       instanceName: sessionId,
       token: this.config.apiKey,
       integration: 'WHATSAPP-BAILEYS',
       qrcode: true,
     });
+    console.log(`[QR Adapter] Instance ${sessionId} created`);
 
     // 3) Wait for instance to initialize
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // 4) Poll instance/connect for QR code
     let connectResult = await this.pollConnectForQr(sessionId);
+    console.log(`[QR Adapter] Initial poll result: qrCode=${!!connectResult.qrCode}, qrBase64=${!!connectResult.qrBase64}, status=${connectResult.status}`);
 
     // 5) If no QR, try restart (regenerates QR in Evolution API v2)
     if (!connectResult.qrCode && !connectResult.qrBase64) {
       try {
+        console.log(`[QR Adapter] No QR found, restarting instance ${sessionId}`);
         await this.request('PUT', `instance/restart/${sessionId}`);
         await new Promise((resolve) => setTimeout(resolve, 3000));
         connectResult = await this.pollConnectForQr(sessionId);
-      } catch {
-        // ignore
+        console.log(`[QR Adapter] After restart poll: qrCode=${!!connectResult.qrCode}, status=${connectResult.status}`);
+      } catch (err) {
+        console.log(`[QR Adapter] Restart failed:`, (err as Error).message);
       }
     }
 
     // 6) Final fallback: delete and recreate once more
     if (!connectResult.qrCode && !connectResult.qrBase64) {
       try {
+        console.log(`[QR Adapter] Still no QR, deleting and recreating ${sessionId}`);
         await this.request('DELETE', `instance/delete/${sessionId}`);
         await new Promise((resolve) => setTimeout(resolve, 1000));
         await this.request('POST', 'instance/create', {
@@ -91,8 +102,9 @@ export class WhatsAppQRBridgeAdapter {
         });
         await new Promise((resolve) => setTimeout(resolve, 3000));
         connectResult = await this.pollConnectForQr(sessionId);
-      } catch {
-        // ignore and use whatever we have
+        console.log(`[QR Adapter] After recreate poll: qrCode=${!!connectResult.qrCode}, status=${connectResult.status}`);
+      } catch (err) {
+        console.log(`[QR Adapter] Recreate failed:`, (err as Error).message);
       }
     }
 
@@ -388,11 +400,13 @@ export class WhatsAppQRBridgeAdapter {
           }
         }
 
+        console.log(`[QR Adapter] Poll attempt ${attempt + 1}/15 for ${sessionId}: state=${rawState}, qrCode=${!!result.qrCode}, qrBase64=${!!result.qrBase64}`);
+
         if (result.qrCode || result.qrBase64 || result.status === 'connected' || result.isMissingInstance) {
           break;
         }
       } catch (err) {
-        // ignore and retry
+        console.log(`[QR Adapter] Poll attempt ${attempt + 1}/15 error:`, (err as Error).message);
       }
       await new Promise((resolve) => setTimeout(resolve, 750));
     }

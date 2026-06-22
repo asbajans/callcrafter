@@ -42,17 +42,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   switch (action) {
     case 'start': {
       const webhookUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://callcrafter.com.tr'}/api/webhooks/whatsapp/qr`
-      const session = await adapter.startSession(sessionId, webhookUrl)
-      await payload.update({
-        collection: 'whatsapp-accounts' as any,
-        id,
-        data: {
-          qrSessionId: session.sessionId,
-          qrCodeData: session.qrCode,
-          qrStatus: session.status,
-        },
-      })
-      return NextResponse.json(session)
+      console.log('[QR] Starting session', { sessionId, webhookUrl, waBridgeUrl: process.env.WA_BRIDGE_URL, hasApiKey: !!process.env.WA_BRIDGE_API_KEY })
+      try {
+        const session = await adapter.startSession(sessionId, webhookUrl)
+        console.log('[QR] Session result', { sessionId: session.sessionId, hasQrCode: !!session.qrCode, hasQrImageUrl: !!session.qrImageUrl, status: session.status })
+        await payload.update({
+          collection: 'whatsapp-accounts' as any,
+          id,
+          data: {
+            qrSessionId: session.sessionId,
+            qrCodeData: session.qrCode,
+            qrStatus: session.status,
+          },
+        })
+        return NextResponse.json(session)
+      } catch (err: any) {
+        console.error('[QR] startSession failed:', err)
+        return NextResponse.json({ error: err.message }, { status: 500 })
+      }
     }
 
     case 'connect': {
