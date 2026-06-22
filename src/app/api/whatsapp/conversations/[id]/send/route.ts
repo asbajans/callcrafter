@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       messageType: data.body ? 'text' : data.templateName ? 'template' : data.mediaType || 'text',
       body: data.body || data.caption || null,
       templateName: data.templateName || null,
-      sentBy: user.userId as any,
+      sentBy: user.id as any,
       status: 'sent',
     },
   })
