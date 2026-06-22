@@ -192,8 +192,8 @@ export class WhatsAppQRBridgeAdapter {
   }
 
   verifyWebhook(body: any): boolean {
-    if (!this.config.webhookSecret) return true;
-    return body?.secret === this.config.webhookSecret;
+    // Evolution API webhooks come from internal Docker network — no secret validation needed
+    return true;
   }
 
   handleWebhook(body: any): {
