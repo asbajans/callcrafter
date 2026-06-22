@@ -117,7 +117,9 @@ services:
       DATABASE_ENABLED: true
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: ${DATABASE_URI}?schema=evolution
-      REDIS_URI: redis://redis:6379
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379
+      CACHE_REDIS_SAVE_INSTANCES: "true"
     depends_on:
       postgres:
         condition: service_healthy
