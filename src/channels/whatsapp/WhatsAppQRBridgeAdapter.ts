@@ -45,44 +45,54 @@ export class WhatsAppQRBridgeAdapter {
   }
 
   async startSession(sessionId: string, webhookUrl?: string): Promise<QrSessionInfo & { qrImageUrl?: string }> {
-    // 1) POST /instance/create
+    // 1) Delete any existing instance first to ensure fresh QR
     try {
-      await this.request('POST', 'instance/create', {
-        instanceName: sessionId,
-        token: this.config.apiKey,
-        integration: 'WHATSAPP-BAILEYS',
-        qrcode: true,
-      });
-    } catch (err: any) {
-      // If it already exists, ignore and continue
-      if (!err.message.includes('Forbidden') && !err.message.includes('already exists')) {
-        throw err;
+      await this.request('DELETE', `instance/delete/${sessionId}`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch {
+      // ignore — instance may not exist
+    }
+
+    // 2) POST /instance/create
+    await this.request('POST', 'instance/create', {
+      instanceName: sessionId,
+      token: this.config.apiKey,
+      integration: 'WHATSAPP-BAILEYS',
+      qrcode: true,
+    });
+
+    // 3) Wait for instance to initialize
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // 4) Poll instance/connect for QR code
+    let connectResult = await this.pollConnectForQr(sessionId);
+
+    // 5) If no QR, try restart (regenerates QR in Evolution API v2)
+    if (!connectResult.qrCode && !connectResult.qrBase64) {
+      try {
+        await this.request('PUT', `instance/restart/${sessionId}`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        connectResult = await this.pollConnectForQr(sessionId);
+      } catch {
+        // ignore
       }
     }
 
-    // Wait 2000ms for instance to initialize
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Poll instance/connect for QR code
-    let connectResult = await this.pollConnectForQr(sessionId);
-
-    // If no QR code found and missing instance or disconnected, recreate once
-    if (
-      !connectResult.qrCode &&
-      !connectResult.qrBase64 &&
-      (connectResult.isMissingInstance || connectResult.status === 'disconnected')
-    ) {
+    // 6) Final fallback: delete and recreate once more
+    if (!connectResult.qrCode && !connectResult.qrBase64) {
       try {
+        await this.request('DELETE', `instance/delete/${sessionId}`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         await this.request('POST', 'instance/create', {
           instanceName: sessionId,
           token: this.config.apiKey,
           integration: 'WHATSAPP-BAILEYS',
           qrcode: true,
         });
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         connectResult = await this.pollConnectForQr(sessionId);
-      } catch (err) {
-        // ignore and use the previous result
+      } catch {
+        // ignore and use whatever we have
       }
     }
 
