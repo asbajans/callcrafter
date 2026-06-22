@@ -2,17 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { cookies } from 'next/headers'
-import { verifyToken } from '@/lib/auth'
+import { getUserIdFromToken } from '@/lib/auth'
 
-async function getUser(req: NextRequest) {
+async function getCurrentUser() {
   const cookieStore = await cookies()
   const token = cookieStore.get('payload-token')?.value
   if (!token) return null
-  return verifyToken(token)
+  const userId = await getUserIdFromToken(token)
+  if (!userId) return null
+  const payload = await getPayload({ config })
+  const user = await payload.findByID({ collection: 'users', id: userId, depth: 0 })
+  if (!user) return null
+  const tenantId = user.tenant ? (typeof user.tenant === 'object' ? (user.tenant as any).id : user.tenant) : undefined
+  return { id: user.id as number, email: user.email as string, role: user.role as string, tenantId }
 }
 
 export async function GET(req: NextRequest) {
-  const user = await getUser(req)
+  const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const payload = await getPayload({ config })
@@ -38,7 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser(req)
+  const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const payload = await getPayload({ config })
