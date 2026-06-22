@@ -3,7 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { WhatsAppAdapter } from '@/channels/whatsapp/WhatsAppAdapter'
 import {
-  resolveAccount, createAdapter, findOrCreateConversation,
+  createAdapter, findOrCreateConversation,
   logWhatsAppMessage, processWithAI, updateConversationLastMessage,
 } from './shared'
 

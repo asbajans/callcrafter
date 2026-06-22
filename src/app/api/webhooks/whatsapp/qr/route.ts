@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { WhatsAppQRBridgeAdapter } from '@/channels/whatsapp/WhatsAppQRBridgeAdapter'
 import {
-  resolveAccount, createQrAdapter, findOrCreateConversation,
+  createQrAdapter, findOrCreateConversation,
   logWhatsAppMessage, processWithAI, updateConversationLastMessage,
 } from '../shared'
 
@@ -16,7 +15,13 @@ export async function POST(req: NextRequest) {
     let account: any = null
 
     if (accountId) {
-      account = await resolveAccount(accountId)
+      const accounts = await payload.find({
+        collection: 'whatsapp-accounts' as any,
+        where: { qrSessionId: { equals: accountId } },
+        depth: 1,
+        limit: 1,
+      })
+      account = accounts.docs[0] ?? null
     } else {
       const accounts = await payload.find({
         collection: 'whatsapp-accounts' as any,

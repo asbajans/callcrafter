@@ -119,12 +119,17 @@ export async function tryResolveJidFromEvolutionContact(qrSessionId: string, tar
 
 export async function findOrCreateConversation(
   account: any,
-  tenantId: string | number,
+  tenantId: string | number | any,
   contactPhone: string,
   contactName?: string,
   contactJid?: string
 ) {
   const payload = await getPayload({ config })
+
+  // Normalize tenantId: if it's an object (from depth:1), extract its id
+  if (typeof tenantId === 'object' && tenantId !== null) {
+    tenantId = tenantId.id
+  }
 
   let targetJid = contactJid || '';
   if (!targetJid && !contactPhone.includes('@')) {
