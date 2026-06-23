@@ -4,7 +4,7 @@ export const UsageLogs: CollectionConfig = {
   slug: 'usage-logs',
   defaultSort: '-createdAt',
   admin: {
-    useAsTitle: 'description',
+    useAsTitle: 'service',
     group: 'Billing',
     defaultColumns: ['tenant', 'channel', 'service', 'provider', 'creditsUsed', 'createdAt'],
   },
