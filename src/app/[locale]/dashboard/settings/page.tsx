@@ -98,7 +98,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.settings')}</h1>
+        <h1 className="text-2xl font-bold text-white">{t('dashboard.settings')}</h1>
         <p className="text-slate-500 mt-1">Manage your account settings</p>
       </div>
 
@@ -117,13 +117,13 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
             <Globe className="w-5 h-5 text-indigo-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">General</h2>
+            <h2 className="text-lg font-semibold text-white">General</h2>
             <p className="text-sm text-slate-500">Language and timezone preferences</p>
           </div>
         </div>
@@ -172,20 +172,20 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
             <Bell className="w-5 h-5 text-amber-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Notifications</h2>
+            <h2 className="text-lg font-semibold text-white">Notifications</h2>
             <p className="text-sm text-slate-500">Email notification preferences</p>
           </div>
         </div>
         <div className="space-y-4 mb-6">
-          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-700/50 hover:bg-slate-800 cursor-pointer">
             <div>
-              <p className="text-sm font-medium text-slate-900">Email Alerts</p>
+              <p className="text-sm font-medium text-white">Email Alerts</p>
               <p className="text-xs text-slate-500">Receive alerts for important events</p>
             </div>
             <input
@@ -195,9 +195,9 @@ export default function SettingsPage() {
               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-5 h-5"
             />
           </label>
-          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-700/50 hover:bg-slate-800 cursor-pointer">
             <div>
-              <p className="text-sm font-medium text-slate-900">Daily Digest</p>
+              <p className="text-sm font-medium text-white">Daily Digest</p>
               <p className="text-xs text-slate-500">Daily summary of conversations and activity</p>
             </div>
             <input
@@ -207,9 +207,9 @@ export default function SettingsPage() {
               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-5 h-5"
             />
           </label>
-          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+          <label className="flex items-center justify-between p-3 rounded-lg border border-slate-700/50 hover:bg-slate-800 cursor-pointer">
             <div>
-              <p className="text-sm font-medium text-slate-900">Weekly Report</p>
+              <p className="text-sm font-medium text-white">Weekly Report</p>
               <p className="text-xs text-slate-500">Weekly performance and usage report</p>
             </div>
             <input
@@ -230,13 +230,13 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-rose-100 rounded-lg flex items-center justify-center">
             <Key className="w-5 h-5 text-rose-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">API Keys</h2>
+            <h2 className="text-lg font-semibold text-white">API Keys</h2>
             <p className="text-sm text-slate-500">Manage API keys for programmatic access</p>
           </div>
         </div>
@@ -246,16 +246,16 @@ export default function SettingsPage() {
             <p className="text-sm text-slate-400 text-center py-4">No API keys created yet</p>
           ) : (
             apiKeys.map((ak) => (
-              <div key={ak.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-200">
+              <div key={ak.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-700/50">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{ak.name}</p>
+                  <p className="text-sm font-medium text-white">{ak.name}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <code className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                    <code className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">
                       {showKey[ak.id] ? ak.key : `${ak.key.slice(0, 8)}••••••••${ak.key.slice(-4)}`}
                     </code>
                     <button
                       onClick={() => setShowKey({ ...showKey, [ak.id]: !showKey[ak.id] })}
-                      className="text-slate-400 hover:text-slate-600"
+                      className="text-slate-400 hover:text-slate-300"
                     >
                       {showKey[ak.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>

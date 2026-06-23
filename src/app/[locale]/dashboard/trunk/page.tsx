@@ -128,7 +128,7 @@ export default function TrunkPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <AlertCircle className="w-10 h-10 text-red-400" />
-        <p className="text-slate-600">{error}</p>
+        <p className="text-slate-300">{error}</p>
         <button onClick={fetchData} className="text-indigo-600 text-sm font-medium hover:text-indigo-800">Try again</button>
       </div>
     );
@@ -138,7 +138,7 @@ export default function TrunkPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.trunk')}</h1>
+          <h1 className="text-2xl font-bold text-white">{t('dashboard.trunk')}</h1>
           <p className="text-slate-500 mt-1">Manage your SIP trunks</p>
         </div>
         <button
@@ -151,15 +151,15 @@ export default function TrunkPage() {
       </div>
 
       {data.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
           <Signal className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500 text-sm">{t('common.noData')}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr className="border-b border-slate-700/50 bg-slate-800">
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Provider</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
@@ -173,20 +173,20 @@ export default function TrunkPage() {
                 const cfg = statusConfig[item.status] || statusConfig.error;
                 const StatusIcon = cfg.icon;
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={item.id} className="hover:bg-slate-800 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-slate-900">{item.name}</span>
+                      <span className="text-sm font-medium text-white">{item.name}</span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{providerLabels[item.provider] || item.provider}</td>
+                    <td className="px-6 py-4 text-sm text-slate-300">{providerLabels[item.provider] || item.provider}</td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                      <span className="inline-flex text-xs font-medium px-2.5 py-1 rounded-full bg-slate-800 text-slate-700">
                         {item.type === 'ours' ? 'Ours' : 'Own'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <StatusIcon className={`w-4 h-4 ${cfg.color}`} />
-                        <span className="text-sm text-slate-600">{cfg.label}</span>
+                        <span className="text-sm text-slate-300">{cfg.label}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
@@ -210,10 +210,10 @@ export default function TrunkPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl w-full max-w-lg mx-4 p-6 shadow-xl">
+          <div className="bg-slate-800 rounded-xl w-full max-w-lg mx-4 p-6 shadow-xl border border-slate-700/50">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-slate-900">Add SIP Trunk</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+              <h2 className="text-lg font-semibold text-white">Add SIP Trunk</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -253,7 +253,7 @@ export default function TrunkPage() {
                   </select>
                 </div>
               </div>
-              <div className="border-t border-slate-200 pt-4">
+              <div className="border-t border-slate-700/50 pt-4">
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Credentials</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -306,7 +306,7 @@ export default function TrunkPage() {
               </div>
 
               {form.provider === 'asterisk' && (
-                <div className="border-t border-slate-200 pt-4">
+                <div className="border-t border-slate-700/50 pt-4">
                   <h3 className="text-sm font-medium text-slate-700 mb-3">Asterisk AMI Settings</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -337,7 +337,7 @@ export default function TrunkPage() {
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
               >
                 {t('common.cancel')}
               </button>
@@ -356,11 +356,11 @@ export default function TrunkPage() {
 
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl w-full max-w-sm mx-4 p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Confirm Delete</h2>
-            <p className="text-sm text-slate-600 mb-6">Are you sure you want to delete this SIP trunk?</p>
+          <div className="bg-slate-800 rounded-xl w-full max-w-sm mx-4 p-6 shadow-xl border border-slate-700/50">
+            <h2 className="text-lg font-semibold text-white mb-2">Confirm Delete</h2>
+            <p className="text-sm text-slate-300 mb-6">Are you sure you want to delete this SIP trunk?</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
                 {t('common.cancel')}
               </button>
               <button onClick={() => handleDelete(deleteId)} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition-colors">

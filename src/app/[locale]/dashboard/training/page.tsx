@@ -24,14 +24,14 @@ const typeIcons: Record<string, typeof FileText> = {
 const typeColors: Record<string, string> = {
   pdf: 'bg-red-100 text-red-700',
   docx: 'bg-blue-100 text-blue-700',
-  txt: 'bg-slate-100 text-slate-700',
+  txt: 'bg-slate-800 text-slate-700',
   csv: 'bg-green-100 text-green-700',
   json: 'bg-amber-100 text-amber-700',
   html: 'bg-purple-100 text-purple-700',
 };
 
 const statusConfig: Record<string, { icon: typeof Clock; color: string }> = {
-  pending: { icon: Clock, color: 'bg-slate-100 text-slate-600' },
+  pending: { icon: Clock, color: 'bg-slate-800 text-slate-300' },
   processing: { icon: Loader2, color: 'bg-blue-100 text-blue-700' },
   ready: { icon: CheckCircle, color: 'bg-emerald-100 text-emerald-700' },
   error: { icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
@@ -139,7 +139,7 @@ export default function TrainingPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <AlertCircle className="w-10 h-10 text-red-400" />
-        <p className="text-slate-600">{error}</p>
+        <p className="text-slate-300">{error}</p>
         <button onClick={fetchData} className="text-indigo-600 text-sm font-medium hover:text-indigo-800">Try again</button>
       </div>
     );
@@ -149,7 +149,7 @@ export default function TrainingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.training')}</h1>
+          <h1 className="text-2xl font-bold text-white">{t('dashboard.training')}</h1>
           <p className="text-slate-500 mt-1">Manage training documents for your AI agents</p>
         </div>
         <button
@@ -162,15 +162,15 @@ export default function TrainingPage() {
       </div>
 
       {data.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
           <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500 text-sm">{t('common.noData')}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr className="border-b border-slate-700/50 bg-slate-800">
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
@@ -185,15 +185,15 @@ export default function TrainingPage() {
                 const cfg = statusConfig[item.status] || statusConfig.pending;
                 const StatusIcon = cfg.icon;
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={item.id} className="hover:bg-slate-800 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-slate-900">{item.name}</span>
+                      <span className="text-sm font-medium text-white">{item.name}</span>
                       {item.description && (
                         <p className="text-xs text-slate-400 mt-0.5">{item.description}</p>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${typeColors[item.type] || 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${typeColors[item.type] || 'bg-slate-800 text-slate-300'}`}>
                         <TypeIcon className="w-3.5 h-3.5" />
                         {item.type ? item.type.toUpperCase() : '—'}
                       </span>
@@ -208,7 +208,7 @@ export default function TrainingPage() {
                         {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : '—'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{item.chunkCount ?? item.vectorCount ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-300">{item.chunkCount ?? item.vectorCount ?? '—'}</td>
                     <td className="px-6 py-4 text-sm text-slate-500">{item.createdAt ? formatDate(item.createdAt) : '—'}</td>
                     <td className="px-6 py-4 text-right">
                       <button
@@ -228,10 +228,10 @@ export default function TrainingPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl w-full max-w-lg mx-4 p-6 shadow-xl">
+          <div className="bg-slate-800 rounded-xl w-full max-w-lg mx-4 p-6 shadow-xl border border-slate-700/50">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-slate-900">Upload Document</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+              <h2 className="text-lg font-semibold text-white">Upload Document</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -294,7 +294,7 @@ export default function TrainingPage() {
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
               >
                 {t('common.cancel')}
               </button>
@@ -313,11 +313,11 @@ export default function TrainingPage() {
 
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl w-full max-w-sm mx-4 p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Confirm Delete</h2>
-            <p className="text-sm text-slate-600 mb-6">Are you sure you want to delete this document?</p>
+          <div className="bg-slate-800 rounded-xl w-full max-w-sm mx-4 p-6 shadow-xl border border-slate-700/50">
+            <h2 className="text-lg font-semibold text-white mb-2">Confirm Delete</h2>
+            <p className="text-sm text-slate-300 mb-6">Are you sure you want to delete this document?</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
                 {t('common.cancel')}
               </button>
               <button onClick={() => handleDelete(deleteId)} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition-colors">

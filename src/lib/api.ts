@@ -153,6 +153,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // Credit balance
+  getMyCredits: () =>
+    request<any>('/api/billing/credits'),
+
   // Tenants
   getTenants: () =>
     request<{ docs: any[] }>('/api/tenants'),

@@ -25,7 +25,7 @@ const statusColors: Record<string, string> = {
 
 const sentimentColors: Record<string, string> = {
   positive: 'bg-emerald-100 text-emerald-700',
-  neutral: 'bg-slate-100 text-slate-600',
+  neutral: 'bg-slate-800 text-slate-300',
   negative: 'bg-red-100 text-red-700',
 };
 
@@ -89,7 +89,7 @@ export default function ConversationsPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <AlertCircle className="w-10 h-10 text-red-400" />
-        <p className="text-slate-600">{error}</p>
+        <p className="text-slate-300">{error}</p>
         <button onClick={fetchData} className="text-indigo-600 text-sm font-medium hover:text-indigo-800">Try again</button>
       </div>
     );
@@ -98,20 +98,20 @@ export default function ConversationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.conversations')}</h1>
+        <h1 className="text-2xl font-bold text-white">{t('dashboard.conversations')}</h1>
         <p className="text-slate-500 mt-1">View and manage conversations</p>
       </div>
 
       {data.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
           <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500 text-sm">{t('common.noData')}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr className="border-b border-slate-700/50 bg-slate-800">
                 <th className="w-8 px-2 py-3" />
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Channel</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Contact</th>
@@ -130,7 +130,7 @@ export default function ConversationsPage() {
                   <>
                     <tr
                       key={item.id}
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      className="hover:bg-slate-800 transition-colors cursor-pointer"
                       onClick={() => toggleExpand(item.id)}
                     >
                       <td className="px-2 py-4">
@@ -146,16 +146,16 @@ export default function ConversationsPage() {
                           {channel.label}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-slate-900 font-medium">{getContactDisplay(item.contact)}</td>
-                      <td className="px-4 py-4 text-sm text-slate-600">
+                      <td className="px-4 py-4 text-sm text-white font-medium">{getContactDisplay(item.contact)}</td>
+                      <td className="px-4 py-4 text-sm text-slate-300">
                         {item.agent && typeof item.agent === 'object' ? (item.agent as any).name : item.agent || '—'}
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[item.status] || 'bg-slate-100 text-slate-600'}`}>
+                        <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[item.status] || 'bg-slate-800 text-slate-300'}`}>
                           {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-slate-600">
+                      <td className="px-4 py-4 text-sm text-slate-300">
                         {item.duration ? formatDuration(item.duration) : '—'}
                       </td>
                       <td className="px-4 py-4 text-sm text-slate-500">
@@ -163,7 +163,7 @@ export default function ConversationsPage() {
                       </td>
                       <td className="px-4 py-4">
                         {item.sentiment ? (
-                          <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${sentimentColors[item.sentiment] || 'bg-slate-100 text-slate-600'}`}>
+                          <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${sentimentColors[item.sentiment] || 'bg-slate-800 text-slate-300'}`}>
                             {item.sentiment.charAt(0).toUpperCase() + item.sentiment.slice(1)}
                           </span>
                         ) : (
@@ -173,7 +173,7 @@ export default function ConversationsPage() {
                     </tr>
                     {expandedId === item.id && (
                       <tr key={`${item.id}-messages`}>
-                        <td colSpan={8} className="px-6 py-4 bg-slate-50">
+                        <td colSpan={8} className="px-6 py-4 bg-slate-800">
                           {messagesLoading ? (
                             <div className="flex items-center justify-center py-4">
                               <Loader2 className="w-5 h-5 text-indigo-500 animate-spin" />
@@ -190,7 +190,7 @@ export default function ConversationsPage() {
                                   <div
                                     className={`max-w-[70%] rounded-lg px-4 py-2 text-sm ${
                                       msg.role === 'assistant'
-                                        ? 'bg-white border border-slate-200 text-slate-800'
+                                        ? 'bg-slate-800/50 border border-slate-700/50 text-white'
                                         : 'bg-indigo-600 text-white'
                                     }`}
                                   >
