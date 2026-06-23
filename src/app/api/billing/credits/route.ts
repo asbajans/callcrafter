@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { cookies } from 'next/headers'
+import { getUserIdFromToken } from '@/lib/auth'
 
 async function getCurrentTenantId(): Promise<number | null> {
   try {
-    const { cookies } = await import('next/headers')
-    const { getUserIdFromToken } = await import('@/lib/auth')
     const cookieStore = await cookies()
     const token = cookieStore.get('payload-token')?.value
     if (!token) return null
@@ -16,10 +16,11 @@ async function getCurrentTenantId(): Promise<number | null> {
     if (!user) return null
 
     const userData = user as any
-    if (userData.tenant) {
+    if (userData.tenant && (typeof userData.tenant === 'object' ? userData.tenant.id : userData.tenant)) {
       return typeof userData.tenant === 'object' ? userData.tenant.id : userData.tenant
     }
 
+    // Fallback: find subscription for this user
     const subs = await payload.find({
       collection: 'subscriptions',
       where: { user: { equals: userId } },
@@ -27,11 +28,14 @@ async function getCurrentTenantId(): Promise<number | null> {
     })
     if (subs.docs.length > 0) {
       const sub = subs.docs[0] as any
-      return typeof sub.tenant === 'object' ? sub.tenant.id : sub.tenant
+      if (sub.tenant) {
+        return typeof sub.tenant === 'object' ? sub.tenant.id : sub.tenant
+      }
     }
 
     return null
-  } catch {
+  } catch (err) {
+    console.error('getCurrentTenantId error:', err)
     return null
   }
 }
@@ -40,7 +44,15 @@ export async function GET() {
   try {
     const tenantId = await getCurrentTenantId()
     if (!tenantId) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      return NextResponse.json({
+        balance: 0,
+        totalPurchased: 0,
+        totalUsed: 0,
+        totalExpired: 0,
+        monthlyLimit: null,
+        earliestExpiry: null,
+        _error: 'auth',
+      })
     }
 
     const payload = await getPayload({ config })
@@ -64,6 +76,13 @@ export async function GET() {
     return NextResponse.json(credits.docs[0])
   } catch (error) {
     console.error('Get credits error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      balance: 0,
+      totalPurchased: 0,
+      totalUsed: 0,
+      totalExpired: 0,
+      monthlyLimit: null,
+      earliestExpiry: null,
+    })
   }
 }
