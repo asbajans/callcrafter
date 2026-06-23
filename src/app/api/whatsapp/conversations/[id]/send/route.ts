@@ -37,53 +37,86 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const account = conversation.account as any
   if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
+  // Create message record first so it shows up even if send fails
+  const message = await payload.create({
+    collection: 'whatsapp-messages' as any,
+    data: {
+      conversation: id,
+      direction: 'outbound',
+      messageType: data.body ? 'text' : data.templateName ? 'template' : data.mediaType || 'text',
+      body: data.body || data.caption || null,
+      templateName: data.templateName || null,
+      sentBy: user.id as any,
+      status: 'pending',
+    },
+  })
+
   let sendResult: any
+  let sendError: string | null = null
 
-  if (account.connectionType === 'cloud_api') {
-    const adapter = new WhatsAppAdapter({
-      accessToken: account.accessToken || '',
-      phoneNumberId: account.phoneNumberId || '',
-      webhookVerifyToken: account.webhookVerifyToken || '',
-    })
+  try {
+    if (account.connectionType === 'cloud_api') {
+      const adapter = new WhatsAppAdapter({
+        accessToken: account.accessToken || '',
+        phoneNumberId: account.phoneNumberId || '',
+        webhookVerifyToken: account.webhookVerifyToken || '',
+      })
 
-    if (data.body) {
-      sendResult = await adapter.sendText(conversation.contactPhone, data.body)
-    } else if (data.templateName) {
-      sendResult = await adapter.sendTemplate(conversation.contactPhone, data.templateName, data.languageCode, data.templateParams)
-    } else if (data.mediaUrl) {
-      sendResult = await adapter.sendMedia(conversation.contactPhone, data.mediaType || 'image', data.mediaUrl, data.caption)
-    }
-  } else if (account.connectionType === 'qr') {
-    const adapter = new WhatsAppQRBridgeAdapter({
-      baseUrl: process.env.WA_BRIDGE_URL || 'http://wa-bridge:8080',
-      apiKey: process.env.WA_BRIDGE_API_KEY || '',
-    })
+      if (data.body) {
+        sendResult = await adapter.sendText(conversation.contactPhone, data.body)
+      } else if (data.templateName) {
+        sendResult = await adapter.sendTemplate(conversation.contactPhone, data.templateName, data.languageCode, data.templateParams)
+      } else if (data.mediaUrl) {
+        sendResult = await adapter.sendMedia(conversation.contactPhone, data.mediaType || 'image', data.mediaUrl, data.caption)
+      }
+    } else if (account.connectionType === 'qr') {
+      const adapter = new WhatsAppQRBridgeAdapter({
+        baseUrl: process.env.WA_BRIDGE_URL || 'http://wa-bridge:8080',
+        apiKey: process.env.WA_BRIDGE_API_KEY || '',
+      })
 
-    const sessionId = account.qrSessionId || account.id.toString()
-    let targetAddress = conversation.contactPhone
+      const sessionId = account.qrSessionId || account.id.toString()
+      let targetAddress = conversation.contactPhone
 
-    // LID-only conversations: try resolving to a real phone number
-    const isLidOnly = conversation.contactJid?.endsWith('@lid') &&
-                      conversation.contactPhone === conversation.contactJid.split('@')[0].replace(/\D/g, '')
+      const isLidOnly = conversation.contactJid?.endsWith('@lid') &&
+                        conversation.contactPhone === conversation.contactJid.split('@')[0].replace(/\D/g, '')
 
-    if (isLidOnly && account.qrSessionId) {
-      const resolvedPhoneJid = await tryResolveJidFromEvolutionContact(account.qrSessionId, conversation.contactJid)
-      if (resolvedPhoneJid && resolvedPhoneJid.endsWith('@s.whatsapp.net')) {
-        const resolvedPhone = resolvedPhoneJid.split('@')[0].replace(/\D/g, '')
-        if (resolvedPhone) {
-          targetAddress = resolvedPhone
+      if (isLidOnly && account.qrSessionId) {
+        const resolvedPhoneJid = await tryResolveJidFromEvolutionContact(account.qrSessionId, conversation.contactJid)
+        if (resolvedPhoneJid && resolvedPhoneJid.endsWith('@s.whatsapp.net')) {
+          const resolvedPhone = resolvedPhoneJid.split('@')[0].replace(/\D/g, '')
+          if (resolvedPhone) {
+            targetAddress = resolvedPhone
+          }
+        } else if (conversation.contactJid) {
+          targetAddress = conversation.contactJid
         }
-      } else if (conversation.contactJid) {
-        targetAddress = conversation.contactJid
+      }
+
+      if (data.body) {
+        sendResult = await adapter.sendText(sessionId, targetAddress, data.body)
+      } else if (data.mediaUrl) {
+        sendResult = await adapter.sendMedia(sessionId, targetAddress, data.mediaType || 'image', data.mediaUrl, data.caption)
       }
     }
-
-    if (data.body) {
-      sendResult = await adapter.sendText(sessionId, targetAddress, data.body)
-    } else if (data.mediaUrl) {
-      sendResult = await adapter.sendMedia(sessionId, targetAddress, data.mediaType || 'image', data.mediaUrl, data.caption)
-    }
+  } catch (e: any) {
+    sendError = e.message
+    console.error('[Send] Failed to send message:', e)
   }
+
+  // Update message with result
+  const whatsAppMessageId = account.connectionType === 'cloud_api'
+    ? sendResult?.messages?.[0]?.id
+    : (sendResult?.key?.id || sendResult?.messageId || '')
+
+  await payload.update({
+    collection: 'whatsapp-messages' as any,
+    id: message.id,
+    data: {
+      status: sendError ? 'failed' : 'sent',
+      whatsAppMessageId: whatsAppMessageId || undefined,
+    },
+  })
 
   await payload.update({
     collection: 'whatsapp-conversations' as any,
@@ -94,24 +127,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   })
 
-  // Extract correct message ID based on provider/connection type
-  const whatsAppMessageId = account.connectionType === 'cloud_api'
-    ? sendResult?.messages?.[0]?.id
-    : (sendResult?.key?.id || sendResult?.messageId || '')
-
-  const message = await payload.create({
-    collection: 'whatsapp-messages' as any,
-    data: {
-      conversation: id,
-      whatsAppMessageId,
-      direction: 'outbound',
-      messageType: data.body ? 'text' : data.templateName ? 'template' : data.mediaType || 'text',
-      body: data.body || data.caption || null,
-      templateName: data.templateName || null,
-      sentBy: user.id as any,
-      status: 'sent',
-    },
-  })
-
-  return NextResponse.json(message, { status: 201 })
+  return NextResponse.json({ ...message, status: sendError ? 'failed' : 'sent', whatsAppMessageId }, { status: sendError ? 200 : 201 })
 }
