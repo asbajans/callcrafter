@@ -122,9 +122,13 @@ export default function WhatsAppAccountsPage() {
   const deleteAccount = async (id: string) => {
     if (!confirm('Bu hesabı silmek istediğinizden emin misiniz?')) return;
     try {
-      await fetch(`/api/whatsapp/accounts/${id}`, {
+      const res = await fetch(`/api/whatsapp/accounts/${id}`, {
         method: 'DELETE', credentials: 'include',
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Silinemedi' }));
+        throw new Error(err.error || 'Silinemedi');
+      }
       toast.success('Hesap silindi');
       fetchAccounts();
     } catch (err: any) {

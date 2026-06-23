@@ -55,6 +55,22 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params
   const payload = await getPayload({ config })
 
+  // First disconnect QR session if any
+  try {
+    const account = await payload.findByID({ collection: 'whatsapp-accounts' as any, id, depth: 0 })
+    if (account?.qrSessionId) {
+      const { WhatsAppQRBridgeAdapter } = await import('@/channels/whatsapp/WhatsAppQRBridgeAdapter')
+      const adapter = new WhatsAppQRBridgeAdapter({
+        baseUrl: process.env.WA_BRIDGE_URL || 'http://wa-bridge:8080',
+        apiKey: process.env.WA_BRIDGE_API_KEY || '',
+      })
+      await adapter.deleteSession(account.qrSessionId).catch(() => {})
+    }
+  } catch (e) {
+    console.log('[Accounts] Failed to cleanup QR session:', e)
+  }
+
   await payload.delete({ collection: 'whatsapp-accounts' as any, id })
+  console.log('[Accounts] Deleted account', id, 'by user', user.id)
   return NextResponse.json({ success: true })
 }
