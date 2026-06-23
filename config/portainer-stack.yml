@@ -110,7 +110,7 @@ services:
       - callcrafter_network
 
   whisper-server:
-    image: ahmetoner/whisper-asr-webservice:latest
+    image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: whisper-server
     restart: unless-stopped
     ports:
