@@ -37,10 +37,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const adapter = getQrAdapter()
-  const sessionId = account.qrSessionId || `wa_${id}`
 
   switch (action) {
     case 'start': {
+      // Use unique session name each time to avoid stale Baileys auth data
+      const sessionId = `wa_${id}_${Date.now()}`
       const webhookUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://callcrafter.com.tr'}/api/webhooks/whatsapp/qr`
       console.log('[QR] Starting session', { sessionId, webhookUrl, waBridgeUrl: process.env.WA_BRIDGE_URL, hasApiKey: !!process.env.WA_BRIDGE_API_KEY })
       try {
@@ -83,7 +84,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     case 'connect': {
-      const session = await adapter.getSessionStatus(sessionId)
+      const connectSessionId = account.qrSessionId
+      if (!connectSessionId) return NextResponse.json({ error: 'No active session' }, { status: 400 })
+      const session = await adapter.getSessionStatus(connectSessionId)
       if (session.qrCode) {
         await payload.update({
           collection: 'whatsapp-accounts' as any,
@@ -101,7 +104,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     case 'disconnect': {
-      await adapter.disconnectSession(sessionId)
+      const disconnectSessionId = account.qrSessionId
+      if (disconnectSessionId) {
+        await adapter.disconnectSession(disconnectSessionId)
+      }
       await payload.update({
         collection: 'whatsapp-accounts' as any,
         id,
