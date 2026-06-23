@@ -70,6 +70,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.log('[Accounts] Failed to cleanup QR session:', e)
   }
 
+  // Delete related data first (foreign key constraint: conversations reference account)
+  try {
+    const conversations = await payload.find({
+      collection: 'whatsapp-conversations' as any,
+      where: { account: { equals: id } },
+      limit: 100,
+    })
+    for (const conv of conversations.docs) {
+      await payload.delete({ collection: 'whatsapp-messages' as any, where: { conversation: { equals: conv.id } } }).catch(() => {})
+      await payload.delete({ collection: 'whatsapp-conversations' as any, id: conv.id }).catch(() => {})
+    }
+  } catch (e) {
+    console.log('[Accounts] Failed to cleanup conversations:', e)
+  }
+
   await payload.delete({ collection: 'whatsapp-accounts' as any, id })
   console.log('[Accounts] Deleted account', id, 'by user', user.id)
   return NextResponse.json({ success: true })
