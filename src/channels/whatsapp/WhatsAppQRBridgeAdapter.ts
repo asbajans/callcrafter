@@ -66,7 +66,23 @@ export class WhatsAppQRBridgeAdapter {
     });
     console.log(`[QR Adapter] Instance ${sessionId} created`);
 
-    // 3) Set webhook immediately
+    // 3) Logout to force fresh QR code (clears any stale Baileys auth)
+    try {
+      console.log(`[QR Adapter] Logging out ${sessionId} to force QR generation`);
+      // Evolution API v2 uses DELETE for logout
+      try {
+        await this.request('DELETE', `instance/logout/${sessionId}`);
+      } catch {
+        // Fallback to POST if DELETE is not supported
+        await this.request('POST', `instance/logout/${sessionId}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      console.log(`[QR Adapter] Logout done for ${sessionId}`);
+    } catch {
+      console.log(`[QR Adapter] Logout not needed for ${sessionId}`);
+    }
+
+    // 4) Set webhook immediately
     if (webhookUrl) {
       console.log(`[QR Adapter] Setting webhook for ${sessionId}`);
       await this.setWebhook(sessionId, webhookUrl).catch((err) =>
@@ -116,10 +132,14 @@ export class WhatsAppQRBridgeAdapter {
       }
     }
 
-    // Final attempt: force QR regeneration
-    console.log(`[QR Adapter] Background polling exhausted, forcing QR for ${sessionId}`);
+    // Final attempt: force QR regeneration via logout
+    console.log(`[QR Adapter] Background polling exhausted, logging out to force QR for ${sessionId}`);
     try {
-      await this.request('POST', `instance/connect/${sessionId}`);
+      try {
+        await this.request('DELETE', `instance/logout/${sessionId}`);
+      } catch {
+        await this.request('POST', `instance/logout/${sessionId}`);
+      }
       await new Promise((resolve) => setTimeout(resolve, 5000));
       const result = await this.pollOnce(sessionId, 15, 1000);
       if (result.qrCode || result.qrBase64) {
@@ -128,12 +148,12 @@ export class WhatsAppQRBridgeAdapter {
         onUpdate({ status: result.status });
       }
     } catch (err) {
-      console.log(`[QR Adapter] Force QR failed:`, (err as Error).message);
+      console.log(`[QR Adapter] Force QR via logout failed:`, (err as Error).message);
     }
   }
 
   private async pollOnce(sessionId: string, maxAttempts: number = 8, intervalMs: number = 1000) {
-    const result = { status: 'disconnected', qrCode: '', qrBase64: '' };
+    const result = { status: 'connecting', qrCode: '', qrBase64: '' }; // Default to 'connecting' (instance exists but no QR yet)
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
@@ -163,6 +183,11 @@ export class WhatsAppQRBridgeAdapter {
           else if (s.includes('close') || s.includes('logout') || s.includes('disconnected')) result.status = 'disconnected';
           else if (s.includes('qrcode') || s.includes('qr')) result.status = 'qrcode';
           else if (s.includes('connecting') || s.includes('init')) result.status = 'connecting';
+        } else if (typeof connectData.count === 'number') {
+          // Response has a count field — instance exists but no QR yet
+          result.status = 'connecting';
+        } else {
+          result.status = 'disconnected';
         }
 
         if (result.qrCode || result.qrBase64 || result.status === 'connected') break;
