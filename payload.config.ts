@@ -22,6 +22,12 @@ import { Media } from './src/payload/collections/Media'
 import { WhatsAppAccounts } from './src/payload/collections/WhatsAppAccounts'
 import { WhatsAppConversations } from './src/payload/collections/WhatsAppConversations'
 import { WhatsAppMessages } from './src/payload/collections/WhatsAppMessages'
+import { CreditPackages } from './src/payload/collections/CreditPackages'
+import { TenantCredits } from './src/payload/collections/TenantCredits'
+import { CreditTransactions } from './src/payload/collections/CreditTransactions'
+import { UsageLogs } from './src/payload/collections/UsageLogs'
+import { AiProviders } from './src/payload/collections/AiProviders'
+import { TenantProviderAccess } from './src/payload/collections/TenantProviderAccess'
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -53,6 +59,12 @@ export default buildConfig({
     WhatsAppAccounts,
     WhatsAppConversations,
     WhatsAppMessages,
+    CreditPackages,
+    TenantCredits,
+    CreditTransactions,
+    UsageLogs,
+    AiProviders,
+    TenantProviderAccess,
   ],
   admin: {
     user: Users.slug,
