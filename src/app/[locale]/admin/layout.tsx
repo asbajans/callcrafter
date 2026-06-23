@@ -9,6 +9,10 @@ const navItems = [
   { href: '', labelKey: 'dashboard', icon: 'LayoutDashboard' },
   { href: 'users', labelKey: 'users', icon: 'Users' },
   { href: 'agents', labelKey: 'agents', icon: 'Bot' },
+  { href: 'tenants', labelKey: 'tenants', icon: 'Building2' },
+  { href: 'credit-packages', labelKey: 'creditPackages', icon: 'Package' },
+  { href: 'ai-providers', labelKey: 'aiProviders', icon: 'Cpu' },
+  { href: 'usage', labelKey: 'usage', icon: 'Activity' },
   { href: 'payments', labelKey: 'payments', icon: 'CreditCard' },
   { href: 'providers', labelKey: 'providers', icon: 'Server' },
   { href: 'system', labelKey: 'system', icon: 'Settings' },
@@ -38,6 +42,21 @@ const iconMap: Record<string, React.ReactNode> = {
   Server: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 17.25v-.228a4.5 4.5 0 00-.12-1.03l-2.268-9.64a3.375 3.375 0 00-3.285-2.602H7.923a3.375 3.375 0 00-3.285 2.602l-2.268 9.64a4.5 4.5 0 00-.12 1.03v.228m19.5 0a3 3 0 01-3 3H5.25a3 3 0 01-3-3m19.5 0a3 3 0 00-3-3H5.25a3 3 0 00-3 3m16.5 0h.008v.008h-.008v-.008zm-3 0h.008v.008h-.008v-.008z" />
+    </svg>
+  ),
+  Building2: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+    </svg>
+  ),
+  Package: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 10.5h.375c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125H21M4.5 10.5H18V7.5c0-1.243-.943-2.25-2.11-2.25H6.61C5.443 5.25 4.5 6.257 4.5 7.5v3zm0 0v7.5c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-1.5M4.5 13.5h18" />
+    </svg>
+  ),
+  Cpu: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" />
     </svg>
   ),
   Settings: (
