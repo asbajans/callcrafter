@@ -3,6 +3,9 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { cookies } from 'next/headers'
 import { getUserIdFromToken } from '@/lib/auth'
+import postgres from 'postgres'
+
+const sql = postgres(process.env.DATABASE_URI || '')
 
 async function getCurrentUser() {
   const cookieStore = await cookies()
@@ -53,11 +56,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const payload = await getPayload({ config })
 
-  // First disconnect QR session if any
+  // Cleanup QR session in Evolution API
   try {
-    const account = await payload.findByID({ collection: 'whatsapp-accounts' as any, id, depth: 0 })
+    const payload = await getPayload({ config })
+    const account = await payload.findByID({ collection: 'whatsapp-accounts' as any, id, depth: 0 }).catch(() => null)
     if (account?.qrSessionId) {
       const { WhatsAppQRBridgeAdapter } = await import('@/channels/whatsapp/WhatsAppQRBridgeAdapter')
       const adapter = new WhatsAppQRBridgeAdapter({
@@ -70,22 +73,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.log('[Accounts] Failed to cleanup QR session:', e)
   }
 
-  // Delete related data first (foreign key constraint: conversations reference account)
+  // Use raw SQL to bypass Payload's SET NULL cascade (account_id has NOT NULL constraint)
   try {
-    const conversations = await payload.find({
-      collection: 'whatsapp-conversations' as any,
-      where: { account: { equals: id } },
-      limit: 100,
+    await sql.begin(async (tx) => {
+      // 1) Delete messages for conversations referencing this account
+      await tx`DELETE FROM "whatsapp_messages" WHERE "conversation" IN (SELECT "id" FROM "whatsapp_conversations" WHERE "account_id" = ${Number(id)})`
+      // 2) Delete conversations referencing this account
+      await tx`DELETE FROM "whatsapp_conversations" WHERE "account_id" = ${Number(id)}`
+      // 3) Delete the account itself
+      await tx`DELETE FROM "whatsapp_accounts" WHERE "id" = ${Number(id)}`
     })
-    for (const conv of conversations.docs) {
-      await payload.delete({ collection: 'whatsapp-messages' as any, where: { conversation: { equals: conv.id } } }).catch(() => {})
-      await payload.delete({ collection: 'whatsapp-conversations' as any, id: conv.id }).catch(() => {})
-    }
-  } catch (e) {
-    console.log('[Accounts] Failed to cleanup conversations:', e)
+    console.log('[Accounts] Deleted account', id, 'by user', user.id)
+    return NextResponse.json({ success: true })
+  } catch (e: any) {
+    console.error('[Accounts] Failed to delete account:', e)
+    return NextResponse.json({ error: e.message || 'Silinemedi' }, { status: 500 })
   }
-
-  await payload.delete({ collection: 'whatsapp-accounts' as any, id })
-  console.log('[Accounts] Deleted account', id, 'by user', user.id)
-  return NextResponse.json({ success: true })
 }
