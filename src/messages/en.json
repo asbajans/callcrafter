@@ -31,7 +31,8 @@
     "payments": "Payments",
     "providers": "Providers",
     "system": "System Settings",
-    "dashboard": "Admin Dashboard"
+    "dashboard": "Admin Dashboard",
+    "diagnostics": "Diagnostics"
   },
   "agent": {
     "create": "Create New Agent",

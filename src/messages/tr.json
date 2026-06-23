@@ -31,7 +31,8 @@
     "payments": "Ödemeler",
     "providers": "Servis Sağlayıcılar",
     "system": "Sistem Ayarları",
-    "dashboard": "Admin Paneli"
+    "dashboard": "Admin Paneli",
+    "diagnostics": "Test"
   },
   "agent": {
     "create": "Yeni Asistan Oluştur",
