@@ -357,8 +357,26 @@ export class WhatsAppQRBridgeAdapter {
         : [body.data || body];
 
       for (const item of items) {
-        // Skip outbound messages (sent from us)
+        // Mark outbound messages with from: 'me' for the webhook handler
         if (item.key?.fromMe === true || item.fromMe === true) {
+          const outboundJid = item.key?.remoteJid || item.remoteJid || '';
+          const msgContent = item.message;
+          let bodyText = item.text || item.body || '';
+          if (msgContent && typeof msgContent === 'object') {
+            bodyText = msgContent.conversation || msgContent.text || bodyText;
+            if (!bodyText && msgContent.extendedTextMessage) {
+              bodyText = msgContent.extendedTextMessage.text || '';
+            }
+          }
+          result.messages.push({
+            id: item.key?.id || item.messageId || item.id || item.keyId || '',
+            from: 'me',
+            to: this.normalizePhone(outboundJid),
+            type: 'text',
+            text: bodyText,
+            pushName: item.pushName || '',
+            remoteJid: this.normalizeJid(outboundJid),
+          });
           continue;
         }
 

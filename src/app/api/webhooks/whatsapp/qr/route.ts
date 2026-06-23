@@ -106,7 +106,46 @@ export async function POST(req: NextRequest) {
 
     for (const msg of webhookData.messages) {
       console.log('[QR-Webhook] Processing message:', { from: msg.from, text: msg.text, type: msg.type, id: msg.id })
-      if (msg.from === 'me') continue
+
+      // Handle AI-sent outbound messages (fromMe) — update record with message ID
+      if (msg.from === 'me') {
+        console.log('[QR-Webhook] Outbound message webhook, to:', msg.to, 'id:', msg.id)
+        const convs = await payload.find({
+          collection: 'whatsapp-conversations' as any,
+          where: {
+            and: [
+              { account: { equals: account.id } },
+              { contactPhone: { equals: msg.to } },
+            ],
+          },
+          sort: '-lastMessageAt',
+          limit: 1,
+        })
+        if (convs.docs.length > 0) {
+          const convId = convs.docs[0].id
+          const latest = await payload.find({
+            collection: 'whatsapp-messages' as any,
+            where: {
+              and: [
+                { direction: { equals: 'outbound' } },
+                { conversation: { equals: convId } },
+              ],
+            },
+            sort: '-createdAt',
+            limit: 1,
+          })
+          const record = latest.docs[0]
+          if (record && !record.whatsAppMessageId) {
+            await payload.update({
+              collection: 'whatsapp-messages' as any,
+              id: record.id,
+              data: { whatsAppMessageId: msg.id } as any,
+            })
+            console.log('[QR-Webhook] Updated outbound msg', record.id, 'with waId:', msg.id)
+          }
+        }
+        continue
+      }
 
       const contactPhone = msg.from
 
@@ -156,12 +195,20 @@ export async function POST(req: NextRequest) {
       console.log('[QR-Webhook] Processing with AI for agent:', agentData.id)
       const responseText = await processWithAI(agentData, messageBody, history)
 
-      console.log('[QR-Webhook] Sending reply:', responseText.slice(0, 100))
-      await adapter.sendText(account.qrSessionId || account.id.toString(), contactPhone, responseText)
+      // Send reply and log outbound — if send fails, still log with 'failed' status
+      let sendFailed = false
+      try {
+        console.log('[QR-Webhook] Sending reply:', responseText.slice(0, 100))
+        await adapter.sendText(account.qrSessionId || account.id.toString(), contactPhone, responseText)
+      } catch (e) {
+        console.error('[QR-Webhook] sendText failed, still logging outbound:', e)
+        sendFailed = true
+      }
 
       await logWhatsAppMessage(conversation.id, 'outbound', {
         messageType: 'text',
         body: responseText,
+        status: sendFailed ? 'failed' : 'sent',
       })
       await updateConversationLastMessage(conversation.id, responseText)
     }
