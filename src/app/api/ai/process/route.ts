@@ -4,6 +4,7 @@ import config from '../../../../../payload.config'
 import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
 import { RateLimiter } from '@/lib/rate-limiter'
 import { aiLogger } from '@/lib/logger'
+import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
 
 const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
   'gpt-4': { provider: 'openai', model: 'gpt-4' },
@@ -91,6 +92,16 @@ export async function POST(req: NextRequest) {
       trainingContext = trainingDocs.docs.map((d: any) => d.content).join('\n\n').slice(0, 10000)
     }
 
+    // Credit check
+    const creditCheck = await checkCreditBalance(tenantId, 5)
+    if (!creditCheck.ok) {
+      aiLogger.warn('Insufficient credits for AI process', { tenantId, balance: creditCheck.balance })
+      return NextResponse.json({
+        error: creditCheck.error,
+        balance: creditCheck.balance,
+      }, { status: 402 })
+    }
+
     const modelConfig = modelMap[agent.model] || { provider: 'openai', model: 'gpt-4o' }
     const apiKeyForProvider =
       modelConfig.provider === 'openai'
@@ -170,6 +181,17 @@ export async function POST(req: NextRequest) {
     })
 
     aiLogger.info('AI process completed successfully', { callSid, responseLength: result.content.length })
+
+    // Deduct credits for the AI call
+    await deductAICost(tenantId, {
+      conversation: String(conversationId),
+      channel: 'voice',
+      service: 'llm',
+      provider: modelConfig.provider,
+      model: modelConfig.model,
+      inputTokens: Math.ceil(transcript.length / 4),
+      outputTokens: Math.ceil(result.content.length / 4),
+    })
 
     return NextResponse.json({
       response: result.content,

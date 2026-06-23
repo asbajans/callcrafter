@@ -5,6 +5,7 @@ import {
   createQrAdapter, findOrCreateConversation,
   logWhatsAppMessage, processWithAI, updateConversationLastMessage,
 } from '../shared'
+import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
 
 export async function POST(req: NextRequest) {
   try {
@@ -193,7 +194,33 @@ export async function POST(req: NextRequest) {
       }
 
       console.log('[QR-Webhook] Processing with AI for agent:', agentData.id)
+
+      // Credit check
+      const tenantIdForCredit = typeof account.tenant === 'object' ? account.tenant.id : account.tenant
+      const creditCheck = await checkCreditBalance(tenantIdForCredit, 2)
+      if (!creditCheck.ok) {
+        console.log('[QR-Webhook] Insufficient credits, sending warning:', creditCheck.error)
+        try {
+          await adapter.sendText(account.qrSessionId || account.id.toString(), contactPhone,
+            `⚠️ Kredi bakiyeniz yetersiz (${creditCheck.balance} kredi). Lütfen yöneticinizle iletişime geçin.`)
+        } catch {}
+        continue
+      }
+
       const responseText = await processWithAI(agentData, messageBody, history)
+
+      // Deduct credits
+      const inputTokens = Math.ceil(messageBody.length / 4)
+      const outputTokens = Math.ceil(responseText.length / 4)
+      await deductAICost(tenantIdForCredit, {
+        conversation: String(conversation.id),
+        channel: 'whatsapp',
+        service: 'llm',
+        provider: typeof agentData.model === 'string' ? agentData.model : 'openai',
+        model: agentData.model,
+        inputTokens,
+        outputTokens,
+      })
 
       // Send reply and log outbound — if send fails, still log with 'failed' status
       let sendFailed = false
