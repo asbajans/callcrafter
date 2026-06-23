@@ -48,7 +48,7 @@ export class WhatsAppQRBridgeAdapter {
   }
 
   async startSession(sessionId: string, webhookUrl?: string): Promise<QrSessionInfo & { qrImageUrl?: string }> {
-    // 1) Delete any existing instance first to ensure fresh QR
+    // 1) Delete any existing instance first to ensure clean state
     try {
       console.log(`[QR Adapter] Deleting existing instance ${sessionId}`);
       await this.request('DELETE', `instance/delete/${sessionId}`);
@@ -57,7 +57,7 @@ export class WhatsAppQRBridgeAdapter {
       console.log(`[QR Adapter] No existing instance to delete for ${sessionId}`);
     }
 
-    // 2) POST /instance/create (fast, no polling)
+    // 2) Create instance — Evolution API starts Baileys internally
     console.log(`[QR Adapter] Creating instance ${sessionId}`);
     await this.request('POST', 'instance/create', {
       instanceName: sessionId,
@@ -66,23 +66,10 @@ export class WhatsAppQRBridgeAdapter {
     });
     console.log(`[QR Adapter] Instance ${sessionId} created`);
 
-    // 3) Logout to force fresh QR code (clears any stale Baileys auth)
-    try {
-      console.log(`[QR Adapter] Logging out ${sessionId} to force QR generation`);
-      // Evolution API v2 uses DELETE for logout
-      try {
-        await this.request('DELETE', `instance/logout/${sessionId}`);
-      } catch {
-        // Fallback to POST if DELETE is not supported
-        await this.request('POST', `instance/logout/${sessionId}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      console.log(`[QR Adapter] Logout done for ${sessionId}`);
-    } catch {
-      console.log(`[QR Adapter] Logout not needed for ${sessionId}`);
-    }
+    // 3) Wait for Baileys to initialize before polling
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // 4) Set webhook immediately
+    // 4) Set webhook early to catch connection events
     if (webhookUrl) {
       console.log(`[QR Adapter] Setting webhook for ${sessionId}`);
       await this.setWebhook(sessionId, webhookUrl).catch((err) =>
@@ -90,8 +77,8 @@ export class WhatsAppQRBridgeAdapter {
       );
     }
 
-    // 4) Quick poll just to check initial state (max 8s)
-    let connectResult = await this.pollOnce(sessionId);
+    // 5) Poll for QR (up to 15s — matches working project timeout)
+    const connectResult = await this.pollOnce(sessionId, 15, 1000);
 
     const qrCode = connectResult.qrCode || '';
     const qrBase64 = connectResult.qrBase64 || '';
@@ -109,39 +96,58 @@ export class WhatsAppQRBridgeAdapter {
 
   async pollForQrInBackground(
     sessionId: string,
-    onUpdate: (data: { qrCode?: string; qrBase64?: string; status: string }) => void
+    onUpdate: (data: { qrCode?: string; qrBase64?: string; sessionId?: string; status: string }) => void
   ): Promise<void> {
     console.log(`[QR Adapter] Starting background polling for ${sessionId}`);
+    let currentSessionId = sessionId;
 
     for (let round = 0; round < 6; round++) {
-      await new Promise((resolve) => setTimeout(resolve, 10000)); // 10s between rounds
-      const result = await this.pollOnce(sessionId, 10, 1000); // 10 attempts x 1s = 10s per round
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      const result = await this.pollOnce(currentSessionId, 10, 1000);
 
       if (result.qrCode || result.qrBase64) {
-        console.log(`[QR Adapter] Background poll found QR for ${sessionId}!`);
+        console.log(`[QR Adapter] Background poll found QR for ${currentSessionId}!`);
         onUpdate({ qrCode: result.qrCode, qrBase64: result.qrBase64, status: result.status });
         return;
       }
 
       onUpdate({ status: result.status });
-      console.log(`[QR Adapter] Background poll round ${round + 1}/6 for ${sessionId}: status=${result.status}`);
+      console.log(`[QR Adapter] Background poll round ${round + 1}/6 for ${currentSessionId}: status=${result.status}`);
 
       if (result.status === 'connected') {
-        console.log(`[QR Adapter] Instance ${sessionId} connected without QR (already paired)`);
+        console.log(`[QR Adapter] Instance ${currentSessionId} connected without QR (already paired)`);
         return;
+      }
+
+      // After 3 rounds (~60s total), recreate with fresh instance name to force QR
+      // (matches working project pattern: new GUID when count:0 persists)
+      if (round === 3) {
+        const newSessionId = `${currentSessionId}_recreate`;
+        console.log(`[QR Adapter] No QR after 3 rounds, recreating as ${newSessionId}`);
+        try {
+          await this.request('DELETE', `instance/delete/${currentSessionId}`);
+        } catch { /* ignore */ }
+        await this.request('POST', 'instance/create', {
+          instanceName: newSessionId,
+          integration: 'WHATSAPP-BAILEYS',
+          qrcode: true,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        currentSessionId = newSessionId;
+        onUpdate({ status: 'connecting', sessionId: newSessionId });
       }
     }
 
-    // Final attempt: force QR regeneration via logout
-    console.log(`[QR Adapter] Background polling exhausted, logging out to force QR for ${sessionId}`);
+    // Final attempt: force QR via logout on current instance
+    console.log(`[QR Adapter] Background polling exhausted, logging out ${currentSessionId}`);
     try {
       try {
-        await this.request('DELETE', `instance/logout/${sessionId}`);
+        await this.request('DELETE', `instance/logout/${currentSessionId}`);
       } catch {
-        await this.request('POST', `instance/logout/${sessionId}`);
+        await this.request('POST', `instance/logout/${currentSessionId}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 5000));
-      const result = await this.pollOnce(sessionId, 15, 1000);
+      const result = await this.pollOnce(currentSessionId, 15, 1000);
       if (result.qrCode || result.qrBase64) {
         onUpdate({ qrCode: result.qrCode, qrBase64: result.qrBase64, status: result.status });
       } else {

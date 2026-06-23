@@ -67,6 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               data: {
                 ...(update.qrCode ? { qrCodeData: update.qrCode } : {}),
                 ...(update.qrBase64 ? { qrCodeData: update.qrBase64 } : {}),
+                ...(update.sessionId ? { qrSessionId: update.sessionId } : {}),
                 qrStatus: update.status,
               },
             })
