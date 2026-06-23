@@ -38,7 +38,7 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
     },
-    push: process.env.NODE_ENV !== 'production',
+    push: process.env.PAYLOAD_PUSH_ENABLED === 'true' ? true : process.env.NODE_ENV !== 'production',
   }),
   collections: [
     Users,
