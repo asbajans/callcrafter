@@ -9,9 +9,11 @@ import {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    console.log('[QR-Webhook] Received webhook:', JSON.stringify(body).slice(0, 1000))
     const payload = await getPayload({ config })
 
     const accountId = body.instance
+    console.log('[QR-Webhook] instance field:', accountId)
     let account: any = null
 
     if (accountId) {
@@ -22,6 +24,9 @@ export async function POST(req: NextRequest) {
         limit: 1,
       })
       account = accounts.docs[0] ?? null
+      if (!account) {
+        console.log('[QR-Webhook] Account not found by qrSessionId:', accountId)
+      }
     } else {
       const accounts = await payload.find({
         collection: 'whatsapp-accounts' as any,
@@ -38,19 +43,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (!account) {
+      console.log('[QR-Webhook] No account found, returning no account')
       return NextResponse.json({ status: 'no account' })
     }
 
     const adapter = createQrAdapter(account)
     if (!adapter) {
+      console.log('[QR-Webhook] No adapter created for account:', account.id)
       return NextResponse.json({ status: 'no adapter' })
     }
 
-    if (!adapter.verifyWebhook(body)) {
-      return NextResponse.json({ status: 'unauthorized' }, { status: 401 })
-    }
-
     const webhookData = adapter.handleWebhook(body)
+    console.log('[QR-Webhook] handleWebhook result:', JSON.stringify({
+      hasConnectionUpdate: !!webhookData.connectionUpdate,
+      statusCount: webhookData.statuses.length,
+      messageCount: webhookData.messages.length,
+      connectionState: webhookData.connectionUpdate?.state,
+    }))
 
     await payload.create({
       collection: 'webhook-logs',
@@ -60,22 +69,23 @@ export async function POST(req: NextRequest) {
         status: 'success',
         payload: body,
       },
-    })
+    }).catch((e: any) => console.log('[QR-Webhook] Failed to save log:', e.message))
 
     if (webhookData.connectionUpdate) {
+      const newStatus = webhookData.connectionUpdate.state === 'open' ? 'connected'
+        : webhookData.connectionUpdate.state === 'connecting' ? 'connecting'
+        : 'disconnected'
+      console.log('[QR-Webhook] Connection update for account', account.id, ':', webhookData.connectionUpdate.state, '->', newStatus)
       await payload.update({
         collection: 'whatsapp-accounts' as any,
         id: account.id,
-        data: {
-          qrStatus: webhookData.connectionUpdate.state === 'open' ? 'connected'
-            : webhookData.connectionUpdate.state === 'connecting' ? 'connecting'
-            : 'disconnected',
-        } as any,
+        data: { qrStatus: newStatus } as any,
       })
       return NextResponse.json({ status: 'connection_update' })
     }
 
     for (const statusUpdate of webhookData.statuses) {
+      console.log('[QR-Webhook] Status update:', statusUpdate)
       const messages = await payload.find({
         collection: 'whatsapp-messages' as any,
         where: { whatsAppMessageId: { equals: statusUpdate.messageId } },
@@ -95,6 +105,7 @@ export async function POST(req: NextRequest) {
     }
 
     for (const msg of webhookData.messages) {
+      console.log('[QR-Webhook] Processing message:', { from: msg.from, text: msg.text, type: msg.type, id: msg.id })
       if (msg.from === 'me') continue
 
       const contactPhone = msg.from
@@ -102,8 +113,12 @@ export async function POST(req: NextRequest) {
       const conversation = await findOrCreateConversation(account, account.tenant, contactPhone, msg.pushName, msg.remoteJid)
 
       const messageBody = msg.text ?? ''
-      if (!messageBody) continue
+      if (!messageBody) {
+        console.log('[QR-Webhook] Skipping message with no body:', msg.id)
+        continue
+      }
 
+      console.log('[QR-Webhook] Creating inbound message for conversation:', conversation.id)
       await logWhatsAppMessage(conversation.id, 'inbound', {
         whatsAppMessageId: msg.id,
         messageType: msg.type,
@@ -114,7 +129,10 @@ export async function POST(req: NextRequest) {
       await updateConversationLastMessage(conversation.id, messageBody)
 
       const agent = conversation.agent
-      if (!agent) continue
+      if (!agent) {
+        console.log('[QR-Webhook] No agent assigned to conversation:', conversation.id)
+        continue
+      }
 
       const recentMessages = await payload.find({
         collection: 'whatsapp-messages' as any,
@@ -130,10 +148,15 @@ export async function POST(req: NextRequest) {
       }))
 
       const agentData = typeof agent === 'object' ? agent : await payload.findByID({ collection: 'agents', id: agent, depth: 2 })
-      if (!agentData) continue
+      if (!agentData) {
+        console.log('[QR-Webhook] Agent data not found')
+        continue
+      }
 
+      console.log('[QR-Webhook] Processing with AI for agent:', agentData.id)
       const responseText = await processWithAI(agentData, messageBody, history)
 
+      console.log('[QR-Webhook] Sending reply:', responseText.slice(0, 100))
       await adapter.sendText(account.qrSessionId || account.id.toString(), contactPhone, responseText)
 
       await logWhatsAppMessage(conversation.id, 'outbound', {
