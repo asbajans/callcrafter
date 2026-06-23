@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '../../../../../payload.config'
 import { InstagramAdapter } from '@/channels/instagram/InstagramAdapter'
 import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
+import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
 
 const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
   'gpt-4': { provider: 'openai', model: 'gpt-4' },
@@ -138,11 +139,20 @@ export async function POST(req: NextRequest) {
         },
       })
 
+      const tenantId = typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant
+
+      // Credit check
+      const creditCheck = await checkCreditBalance(tenantId, 2)
+      if (!creditCheck.ok) {
+        await adapter.sendText(msg.from, `⚠️ Yetersiz kredi (${creditCheck.balance}). Lütfen yöneticinizle iletişime geçin.`)
+        continue
+      }
+
       const result = await orchestrator.process({
         text: msg.text,
         context: {
           agentId: String(agent.id),
-          tenantId: typeof agent.tenant === 'object' ? String(agent.tenant.id) : String(agent.tenant),
+          tenantId: String(tenantId),
           systemPrompt: agent.systemPrompt,
           conversationHistory: [],
           trainingContext,
@@ -150,6 +160,17 @@ export async function POST(req: NextRequest) {
           tools: (agent.tools || []) as any,
         },
         channel: 'instagram',
+      })
+
+      // Deduct credits
+      await deductAICost(tenantId, {
+        conversation: String(conversationId),
+        channel: 'instagram',
+        service: 'llm',
+        provider: modelConfig.provider,
+        model: modelConfig.model,
+        inputTokens: Math.ceil(msg.text.length / 4),
+        outputTokens: Math.ceil(result.content.length / 4),
       })
 
       await adapter.sendText(msg.from, result.content)

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CreditCard, Loader2, AlertCircle, Check, Zap,
-  Clock, Users, MessageSquare, Phone, FileText,
+  Clock, Users, MessageSquare, Phone, FileText, Coins,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -13,19 +13,23 @@ export default function BillingPage() {
   const t = useTranslations();
   const [plans, setPlans] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [creditPackages, setCreditPackages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [planRes, subRes] = await Promise.all([
+      const [planRes, subRes, creditRes] = await Promise.all([
         api.getPricingPlans(),
         api.getSubscriptions(),
+        api.getCreditPackages(),
       ]);
       setPlans((planRes.docs || []).filter((p: any) => p.status === 'active').sort((a: any, b: any) => a.displayOrder - b.displayOrder));
       setSubscriptions(subRes.docs || []);
+      setCreditPackages((creditRes.docs || []).filter((p: any) => p.isActive !== false).sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)));
     } catch (err: any) {
       setError(err.message || 'Failed to load billing data');
     } finally {
@@ -34,6 +38,25 @@ export default function BillingPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  async function purchaseCredits(pkg: any) {
+    setPurchasing(pkg.id);
+    try {
+      const res = await api.createCreditCheckout({
+        packageId: pkg.id,
+        tenantId: 0,
+        successUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing?success=1`,
+        cancelUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing`,
+      });
+      if (res.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to initiate purchase');
+    } finally {
+      setPurchasing(null);
+    }
+  }
 
   const currentSub = subscriptions[0];
   const currentPlan = currentSub && typeof currentSub.plan === 'object'
@@ -119,6 +142,44 @@ export default function BillingPage() {
                   {key.charAt(0).toUpperCase() + key.slice(1)}
                 </div>
                 <p className="text-xl font-bold text-slate-900">{val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {creditPackages.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Credit Packages</h2>
+          <p className="text-sm text-slate-500 mb-4">Purchase credits to use AI services. Credits expire after 6 months.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {creditPackages.map((pkg: any) => (
+              <div
+                key={pkg.id}
+                className="bg-white rounded-xl border border-slate-200 p-5 hover:border-rose-200 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+                  <Coins className="w-4 h-4" />
+                  {pkg.name}
+                </div>
+                <p className="text-3xl font-bold text-slate-900 mb-1">
+                  {pkg.credits.toLocaleString()}
+                </p>
+                <p className="text-xs text-slate-400 mb-4">credits</p>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-2xl font-semibold text-rose-600">${pkg.price.toFixed(2)}</span>
+                  <span className="text-xs text-slate-400">
+                    {((pkg.price / pkg.credits) * 100).toFixed(1)}¢/credit
+                  </span>
+                </div>
+                <button
+                  onClick={() => purchaseCredits(pkg)}
+                  disabled={purchasing === pkg.id}
+                  className="w-full py-2 rounded-lg text-sm font-medium text-white bg-rose-600 hover:bg-rose-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {purchasing === pkg.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {purchasing === pkg.id ? 'Processing...' : 'Buy Now'}
+                </button>
               </div>
             ))}
           </div>

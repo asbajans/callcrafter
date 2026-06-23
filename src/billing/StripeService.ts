@@ -120,6 +120,44 @@ export class StripeService {
     return invoices.data;
   }
 
+  async createCreditCheckoutSession(params: {
+    tenantId: number | string;
+    creditPackageId: number | string;
+    credits: number;
+    priceInCents: number;
+    successUrl: string;
+    cancelUrl: string;
+    customerId?: string;
+    metadata?: Record<string, string>;
+  }): Promise<Stripe.Checkout.Session> {
+    return this.stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer: params.customerId,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `${params.credits.toLocaleString()} Credits`,
+              metadata: { creditPackageId: String(params.creditPackageId) },
+            },
+            unit_amount: params.priceInCents,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      metadata: {
+        tenantId: String(params.tenantId),
+        creditPackageId: String(params.creditPackageId),
+        credits: String(params.credits),
+        type: 'credit_purchase',
+        ...params.metadata,
+      },
+    });
+  }
+
   async createPaymentIntent(
     amount: number,
     currency: string,

@@ -143,6 +143,16 @@ export const api = {
   getSubscriptions: () =>
     request<{ docs: any[] }>('/api/subscriptions'),
 
+  // Credit Packages
+  getCreditPackages: () =>
+    request<{ docs: any[] }>('/api/credit-packages'),
+
+  createCreditCheckout: (data: { packageId: number; tenantId?: number; successUrl: string; cancelUrl: string }) =>
+    request<{ url: string }>('/api/billing/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Tenants
   getTenants: () =>
     request<{ docs: any[] }>('/api/tenants'),

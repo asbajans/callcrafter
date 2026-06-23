@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '../../../../../payload.config';
 import { StripeService } from '@/billing/StripeService';
+import { CreditService } from '@/billing/CreditService';
 import { billingLogger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
@@ -35,7 +36,40 @@ export async function POST(req: NextRequest) {
         const session = eventData as any;
         const tenantId = session.metadata?.tenantId;
         const planId = session.metadata?.planId;
+        const purchaseType = session.metadata?.type;
+        const credits = session.metadata?.credits;
+        const creditPackageId = session.metadata?.creditPackageId;
 
+        // Credit package purchase (one-time payment)
+        if (purchaseType === 'credit_purchase' && tenantId && credits) {
+          const creditService = new CreditService();
+          const creditAmount = parseInt(credits);
+          await creditService.addCredits(tenantId, creditAmount, 'stripe', {
+            description: `Stripe purchase - ${creditAmount} credits`,
+            expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+            stripePaymentIntentId: session.payment_intent,
+            creditPackageId: creditPackageId,
+          });
+
+          // Log payment in payments collection
+          await payload.create({
+            collection: 'payments',
+            data: {
+              tenant: tenantId,
+              amount: session.amount_total ? session.amount_total / 100 : 0,
+              currency: session.currency || 'usd',
+              status: 'succeeded',
+              stripePaymentIntentId: session.payment_intent,
+              description: `Credit purchase - ${creditAmount} credits`,
+              metadata: { type: 'credit_purchase', credits: creditAmount, creditPackageId },
+            },
+          });
+
+          billingLogger.info('Credit purchase completed', { tenantId, credits: creditAmount });
+          break;
+        }
+
+        // Subscription plan checkout (existing behavior)
         if (tenantId && planId) {
           const existing = await payload.find({
             collection: 'subscriptions',
