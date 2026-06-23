@@ -52,13 +52,12 @@ export class WhatsAppQRBridgeAdapter {
     try {
       console.log(`[QR Adapter] Deleting existing instance ${sessionId}`);
       await this.request('DELETE', `instance/delete/${sessionId}`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      console.log(`[QR Adapter] Instance ${sessionId} deleted`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch {
-      console.log(`[QR Adapter] No existing instance to delete (or delete failed) for ${sessionId}`);
+      console.log(`[QR Adapter] No existing instance to delete for ${sessionId}`);
     }
 
-    // 2) POST /instance/create
+    // 2) POST /instance/create (fast, no polling)
     console.log(`[QR Adapter] Creating instance ${sessionId}`);
     await this.request('POST', 'instance/create', {
       instanceName: sessionId,
@@ -67,31 +66,16 @@ export class WhatsAppQRBridgeAdapter {
     });
     console.log(`[QR Adapter] Instance ${sessionId} created`);
 
-    // 3) Wait for instance to initialize (longer for first-time Baileys setup)
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
-    // 4) Poll instance/connect for QR code (up to 60s with 1s intervals)
-    let connectResult = await this.pollConnectForQr(sessionId);
-    console.log(`[QR Adapter] Initial poll result: qrCode=${!!connectResult.qrCode}, qrBase64=${!!connectResult.qrBase64}, status=${connectResult.status}`);
-
-    // 5) If still no QR, delete and recreate once more with longer wait
-    if (!connectResult.qrCode && !connectResult.qrBase64 && connectResult.status !== 'connected') {
-      try {
-        console.log(`[QR Adapter] Still no QR after initial poll, deleting and recreating ${sessionId}`);
-        await this.request('DELETE', `instance/delete/${sessionId}`);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        await this.request('POST', 'instance/create', {
-          instanceName: sessionId,
-          integration: 'WHATSAPP-BAILEYS',
-          qrcode: true,
-        });
-        await new Promise((resolve) => setTimeout(resolve, 8000));
-        connectResult = await this.pollConnectForQr(sessionId);
-        console.log(`[QR Adapter] After recreate poll: qrCode=${!!connectResult.qrCode}, status=${connectResult.status}`);
-      } catch (err) {
-        console.log(`[QR Adapter] Recreate failed:`, (err as Error).message);
-      }
+    // 3) Set webhook immediately
+    if (webhookUrl) {
+      console.log(`[QR Adapter] Setting webhook for ${sessionId}`);
+      await this.setWebhook(sessionId, webhookUrl).catch((err) =>
+        console.log(`[QR Adapter] Webhook set failed:`, (err as Error).message)
+      );
     }
+
+    // 4) Quick poll just to check initial state (max 8s)
+    let connectResult = await this.pollOnce(sessionId);
 
     const qrCode = connectResult.qrCode || '';
     const qrBase64 = connectResult.qrBase64 || '';
@@ -104,17 +88,89 @@ export class WhatsAppQRBridgeAdapter {
       qrImageUrl = `https://quickchart.io/qr?size=260&text=${encodeURIComponent(qrCode)}`;
     }
 
-    // Ensure webhook is set
-    if (webhookUrl) {
-      await this.setWebhook(sessionId, webhookUrl).catch(() => {});
+    return { sessionId, qrCode, qrImageUrl, status: this.mapStatus(status) };
+  }
+
+  async pollForQrInBackground(
+    sessionId: string,
+    onUpdate: (data: { qrCode?: string; qrBase64?: string; status: string }) => void
+  ): Promise<void> {
+    console.log(`[QR Adapter] Starting background polling for ${sessionId}`);
+
+    for (let round = 0; round < 6; round++) {
+      await new Promise((resolve) => setTimeout(resolve, 10000)); // 10s between rounds
+      const result = await this.pollOnce(sessionId, 10, 1000); // 10 attempts x 1s = 10s per round
+
+      if (result.qrCode || result.qrBase64) {
+        console.log(`[QR Adapter] Background poll found QR for ${sessionId}!`);
+        onUpdate({ qrCode: result.qrCode, qrBase64: result.qrBase64, status: result.status });
+        return;
+      }
+
+      onUpdate({ status: result.status });
+      console.log(`[QR Adapter] Background poll round ${round + 1}/6 for ${sessionId}: status=${result.status}`);
+
+      if (result.status === 'connected') {
+        console.log(`[QR Adapter] Instance ${sessionId} connected without QR (already paired)`);
+        return;
+      }
     }
 
-    return {
-      sessionId,
-      qrCode,
-      qrImageUrl,
-      status: this.mapStatus(status),
-    };
+    // Final attempt: force QR regeneration
+    console.log(`[QR Adapter] Background polling exhausted, forcing QR for ${sessionId}`);
+    try {
+      await this.request('POST', `instance/connect/${sessionId}`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const result = await this.pollOnce(sessionId, 15, 1000);
+      if (result.qrCode || result.qrBase64) {
+        onUpdate({ qrCode: result.qrCode, qrBase64: result.qrBase64, status: result.status });
+      } else {
+        onUpdate({ status: result.status });
+      }
+    } catch (err) {
+      console.log(`[QR Adapter] Force QR failed:`, (err as Error).message);
+    }
+  }
+
+  private async pollOnce(sessionId: string, maxAttempts: number = 8, intervalMs: number = 1000) {
+    const result = { status: 'disconnected', qrCode: '', qrBase64: '' };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        let connectData: any;
+        try {
+          connectData = await this.request('GET', `instance/connect/${sessionId}`);
+        } catch {
+          try {
+            connectData = await this.request('GET', `instance/qrcode/${sessionId}`);
+          } catch {
+            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+            continue;
+          }
+        }
+
+        result.qrCode = this.findFirstString(connectData, ['code', 'qrcode', 'qr', 'qrCode']) || '';
+        result.qrBase64 = this.findFirstString(connectData, ['base64', 'qrBase64', 'qrcodeBase64']) || '';
+
+        const rawState = this.findFirstString(connectData, ['state', 'status', 'connectionStatus'])
+          || connectData?.instance?.state
+          || connectData?.instance?.status
+          || null;
+
+        if (rawState) {
+          const s = rawState.toLowerCase();
+          if (s.includes('open') || s.includes('connected') || s.includes('online')) result.status = 'connected';
+          else if (s.includes('close') || s.includes('logout') || s.includes('disconnected')) result.status = 'disconnected';
+          else if (s.includes('qrcode') || s.includes('qr')) result.status = 'qrcode';
+          else if (s.includes('connecting') || s.includes('init')) result.status = 'connecting';
+        }
+
+        if (result.qrCode || result.qrBase64 || result.status === 'connected') break;
+      } catch { /* retry */ }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    return result;
   }
 
   async getSessionStatus(sessionId: string): Promise<QrSessionInfo> {
@@ -354,118 +410,6 @@ export class WhatsAppQRBridgeAdapter {
     return this.request('GET', 'instance/fetchInstances')
       .then(() => true)
       .catch(() => false);
-  }
-
-  private async pollConnectForQr(sessionId: string, maxAttempts: number = 60, intervalMs: number = 1000) {
-    const result = {
-      status: 'disconnected',
-      qrCode: '',
-      qrBase64: '',
-      isMissingInstance: false,
-    };
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        let connectData: any;
-
-        // Try the main connect endpoint
-        try {
-          connectData = await this.request('GET', `instance/connect/${sessionId}`);
-        } catch {
-          // If connect endpoint fails, try qrcode endpoint as fallback
-          try {
-            connectData = await this.request('GET', `instance/qrcode/${sessionId}`);
-          } catch {
-            // If both fail, wait and retry
-            await new Promise((resolve) => setTimeout(resolve, intervalMs));
-            continue;
-          }
-        }
-
-        // Extract QR code from response
-        result.qrCode = this.findFirstString(connectData, ['code', 'qrcode', 'qr', 'qrCode']) || '';
-        result.qrBase64 = this.findFirstString(connectData, ['base64', 'qrBase64', 'qrcodeBase64']) || '';
-
-        if (this.findCountZero(connectData)) {
-          result.isMissingInstance = true;
-        }
-
-        // Extract state — try common field names
-        const rawState = this.findFirstString(connectData, ['state', 'status', 'connectionStatus'])
-          || connectData?.instance?.state
-          || connectData?.instance?.status
-          || null;
-
-        if (rawState) {
-          const s = rawState.toLowerCase();
-          if (s.includes('open') || s.includes('connected') || s.includes('online')) {
-            result.status = 'connected';
-          } else if (s.includes('close') || s.includes('logout') || s.includes('disconnected')) {
-            result.status = 'disconnected';
-          } else if (s.includes('qrcode') || s.includes('qr')) {
-            // QR state — keep polling for actual QR data
-            result.status = 'qrcode';
-          } else if (s.includes('connecting') || s.includes('init')) {
-            result.status = 'connecting';
-          }
-        }
-
-        // Also check nested instance.status
-        if (!rawState && connectData?.instance?.status) {
-          const s = connectData.instance.status.toLowerCase();
-          if (s.includes('open')) result.status = 'connected';
-          else if (s.includes('close')) result.status = 'disconnected';
-          else if (s.includes('qrcode') || s.includes('qr')) result.status = 'qrcode';
-          else if (s.includes('connecting')) result.status = 'connecting';
-        }
-
-        if (attempt === 0 || attempt === maxAttempts - 1 || attempt % 10 === 9) {
-          console.log(`[QR Adapter] Poll ${attempt + 1}/${maxAttempts} for ${sessionId}: state=${rawState || '(nested)'}, qrCode=${!!result.qrCode}, qrBase64=${!!result.qrBase64}, status=${result.status}`);
-        }
-
-        // Exit early if we have QR data
-        if (result.qrCode || result.qrBase64 || result.status === 'connected') {
-          break;
-        }
-      } catch (err) {
-        if (attempt === 0) {
-          console.log(`[QR Adapter] Poll ${attempt + 1}/${maxAttempts} error:`, (err as Error).message);
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-
-    // Last resort: if still no QR and status is connecting/qrcode, try POST to force QR regeneration
-    if (!result.qrCode && !result.qrBase64 && result.status !== 'connected') {
-      try {
-        console.log(`[QR Adapter] Poll exhausted, forcing QR via POST instance/connect/${sessionId}`);
-        const forceData: any = await this.request('POST', `instance/connect/${sessionId}`);
-        result.qrCode = this.findFirstString(forceData, ['code', 'qrcode', 'qr', 'qrCode']) || '';
-        result.qrBase64 = this.findFirstString(forceData, ['base64', 'qrBase64', 'qrcodeBase64']) || '';
-        console.log(`[QR Adapter] Force QR result: qrCode=${!!result.qrCode}, qrBase64=${!!result.qrBase64}`);
-
-        // If still no QR, poll one more time after forced connect
-        if (!result.qrCode && !result.qrBase64) {
-          for (let attempt = 0; attempt < 20; attempt++) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            try {
-              const retryData: any = await this.request('GET', `instance/connect/${sessionId}`);
-              result.qrCode = this.findFirstString(retryData, ['code', 'qrcode', 'qr', 'qrCode']) || '';
-              result.qrBase64 = this.findFirstString(retryData, ['base64', 'qrBase64', 'qrcodeBase64']) || '';
-              if (result.qrCode || result.qrBase64) {
-                console.log(`[QR Adapter] Post-force QR poll ${attempt + 1}/20: FOUND QR!`);
-                break;
-              }
-            } catch { /* retry */ }
-          }
-        }
-      } catch (err) {
-        console.log(`[QR Adapter] Force QR failed:`, (err as Error).message);
-      }
-    }
-
-    console.log(`[QR Adapter] Final poll result for ${sessionId}: qrCode=${!!result.qrCode}, qrBase64=${!!result.qrBase64}, status=${result.status}`);
-    return result;
   }
 
   private findFirstString(obj: any, keys: string[]): string | null {

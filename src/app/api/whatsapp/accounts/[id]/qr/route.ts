@@ -55,6 +55,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             qrStatus: session.status,
           },
         })
+
+        // Start background polling for QR code (fire-and-forget)
+        adapter.pollForQrInBackground(sessionId, async (update) => {
+          try {
+            const p = await getPayload({ config })
+            await p.update({
+              collection: 'whatsapp-accounts' as any,
+              id,
+              data: {
+                ...(update.qrCode ? { qrCodeData: update.qrCode } : {}),
+                ...(update.qrBase64 ? { qrCodeData: update.qrBase64 } : {}),
+                qrStatus: update.status,
+              },
+            })
+            console.log(`[QR] Background update for account ${id}:`, update)
+          } catch (e) {
+            console.error(`[QR] Background update failed for ${id}:`, e)
+          }
+        }).catch((err) => console.error('[QR] Background polling error:', err))
+
         return NextResponse.json(session)
       } catch (err: any) {
         console.error('[QR] startSession failed:', err)
@@ -64,8 +84,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     case 'connect': {
       const session = await adapter.getSessionStatus(sessionId)
-      if (session.status === 'connected') {
-        await adapter.setWebhook(sessionId, `${process.env.NEXT_PUBLIC_BASE_URL || 'https://callcrafter.com.tr'}/api/webhooks/whatsapp/qr`)
+      if (session.qrCode) {
+        await payload.update({
+          collection: 'whatsapp-accounts' as any,
+          id,
+          data: { qrCodeData: session.qrCode, qrStatus: session.status } as any,
+        })
+      } else if (session.status === 'connected') {
         await payload.update({
           collection: 'whatsapp-accounts' as any,
           id,
