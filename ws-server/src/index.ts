@@ -10,9 +10,10 @@ import { handleZadarmaCall, endZadarmaCall, getZadarmaActiveCallCount } from './
 const HTTP_PORT = parseInt(process.env.WS_HTTP_PORT || '8080');
 const WS_PORT = parseInt(process.env.WS_WS_PORT || '9090');
 
-// Initialize media stream pipeline
+// Initialize media stream pipeline with self-hosted STT/TTS
 initMediaStream({
-  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  whisperServerUrl: process.env.WHISPER_SERVER_URL || 'http://localhost:3502',
+  piperServerUrl: process.env.PIPER_TTS_URL || 'http://localhost:3503',
   appApiUrl: process.env.APP_API_URL || 'http://localhost:3000',
   internalApiKey: process.env.INTERNAL_API_KEY || '',
 });

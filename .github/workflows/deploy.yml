@@ -38,6 +38,16 @@ jobs:
             asbajans/callcrafter-ws:latest
             asbajans/callcrafter-ws:${{ github.sha }}
 
+      - name: Build and push piper-server
+        uses: docker/build-push-action@v6
+        with:
+          context: piper-server
+          file: piper-server/Dockerfile
+          push: true
+          tags: |
+            asbajans/callcrafter-piper:latest
+            asbajans/callcrafter-piper:${{ github.sha }}
+
       - name: Trigger Portainer redeploy (webhook)
         run: |
           for i in 1 2; do

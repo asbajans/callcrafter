@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import { mulawToWav, sleep } from './utils.js';
+import { sleep } from './utils.js';
 
 interface CallSession {
   callSid: string;
@@ -16,35 +15,27 @@ interface CallSession {
 
 const sessions = new Map<string, CallSession>();
 
-const PROCESS_INTERVAL = 1200;
-const MAX_CHUNKS_BEFORE_PROCESS = 300;
-
-let openai: OpenAI | null = null;
+let whisperUrl = process.env.WHISPER_SERVER_URL || 'http://localhost:3502';
+let piperUrl = process.env.PIPER_TTS_URL || 'http://localhost:3503';
 let appApiUrl = process.env.APP_API_URL || 'http://localhost:3000';
 let internalApiKey = process.env.INTERNAL_API_KEY || '';
 
 export function initMediaStream(config: {
-  openaiApiKey: string;
+  whisperServerUrl?: string;
+  piperServerUrl?: string;
   appApiUrl?: string;
   internalApiKey?: string;
 }) {
-  openai = new OpenAI({ apiKey: config.openaiApiKey });
+  if (config.whisperServerUrl) whisperUrl = config.whisperServerUrl;
+  if (config.piperServerUrl) piperUrl = config.piperServerUrl;
   if (config.appApiUrl) appApiUrl = config.appApiUrl;
   if (config.internalApiKey) internalApiKey = config.internalApiKey;
 }
 
 export function createSession(callSid: string, streamSid: string, from: string, to: string): CallSession {
   const session: CallSession = {
-    callSid,
-    streamSid,
-    from,
-    to,
-    chunks: [],
-    lastChunkTime: Date.now(),
-    transcripts: [],
-    isAiSpeaking: false,
-    accumulatedAudio: Buffer.alloc(0),
-    finalized: false,
+    callSid, streamSid, from, to, chunks: [], lastChunkTime: Date.now(),
+    transcripts: [], isAiSpeaking: false, accumulatedAudio: Buffer.alloc(0), finalized: false,
   };
   sessions.set(callSid, session);
   return session;
@@ -57,7 +48,6 @@ export function getSession(callSid: string): CallSession | undefined {
 export function addAudioChunk(callSid: string, payload: string): void {
   const session = sessions.get(callSid);
   if (!session || session.isAiSpeaking || session.finalized) return;
-
   const chunk = Buffer.from(payload, 'base64');
   session.chunks.push(chunk);
   session.lastChunkTime = Date.now();
@@ -82,6 +72,41 @@ export function sendAudioToTwilio(
   }
 }
 
+async function transcribeLocal(wavBuffer: Buffer): Promise<string> {
+  const form = new FormData();
+  const blob = new Blob([new Uint8Array(wavBuffer)], { type: 'audio/wav' });
+  form.append('audio_file', blob, 'audio.wav');
+
+  const res = await fetch(`${whisperUrl}/asr`, {
+    method: 'POST',
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Whisper error (${res.status}): ${err}`);
+  }
+
+  const data = await res.json();
+  return (data.text || data.segments?.[0]?.text || '').trim();
+}
+
+async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> {
+  const res = await fetch(`${piperUrl}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, voice: voiceId || undefined }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Piper error (${res.status}): ${err}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export async function processAudio(
   send: (payload: string) => void,
   session: CallSession,
@@ -91,28 +116,14 @@ export async function processAudio(
   const audioBuffer = Buffer.concat(session.chunks);
   session.chunks = [];
 
+  const { mulawToWav } = await import('./utils.js');
   const wavBuffer = mulawToWav(audioBuffer);
 
   let transcript = '';
   try {
-    const blob = new Blob([new Uint8Array(wavBuffer)], { type: 'audio/wav' });
-    const file = new File([blob], 'audio.wav', { type: 'audio/wav' });
-
-    if (!openai) {
-      console.error('STT not initialized');
-      return null;
-    }
-
-    const transcription = await openai.audio.transcriptions.create({
-      model: 'whisper-1',
-      file,
-      response_format: 'text',
-    });
-
-    transcript = transcription.trim();
+    transcript = await transcribeLocal(wavBuffer);
     if (!transcript) return null;
-
-    console.log(`📝 Transcript: "${transcript}"`);
+    console.log(`Transcript: "${transcript}"`);
   } catch (err) {
     console.error('STT error:', err);
     return null;
@@ -154,7 +165,7 @@ export async function processAudio(
     session.transcripts.push({ role: 'user', content: transcript });
     session.transcripts.push({ role: 'assistant', content: aiResponse });
 
-    await generateAndSendTTS(send, session, aiResponse, data.voiceId, data.voiceSettings);
+    await generateAndSendTTS(send, session, aiResponse);
 
     return aiResponse;
   } catch (err) {
@@ -168,48 +179,9 @@ async function generateAndSendTTS(
   send: (payload: string) => void,
   session: CallSession,
   text: string,
-  voiceId: string,
-  voiceSettings: any,
 ): Promise<void> {
   try {
-    const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
-    if (!elevenLabsKey) {
-      console.error('ELEVENLABS_API_KEY not set');
-      session.isAiSpeaking = false;
-      return;
-    }
-
-    const ttsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': elevenLabsKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_multilingual_v2',
-          output_format: 'ulaw_8000',
-          voice_settings: {
-            stability: voiceSettings?.stability ?? 0.5,
-            similarity_boost: voiceSettings?.similarityBoost ?? 0.75,
-            style: voiceSettings?.style ?? 0.0,
-            use_speaker_boost: voiceSettings?.useSpeakerBoost ?? true,
-          },
-        }),
-      },
-    );
-
-    if (!ttsResponse.ok) {
-      const errorText = await ttsResponse.text();
-      console.error(`TTS error (${ttsResponse.status}):`, errorText);
-      session.isAiSpeaking = false;
-      return;
-    }
-
-    const arrayBuffer = await ttsResponse.arrayBuffer();
-    const mulawAudio = Buffer.from(arrayBuffer);
+    const mulawAudio = await synthesizeLocal(text);
 
     if (mulawAudio.length === 0) {
       console.error('TTS returned empty audio');
@@ -217,7 +189,7 @@ async function generateAndSendTTS(
       return;
     }
 
-    console.log(`🔊 TTS: ${mulawAudio.length} bytes of ulaw audio for "${text.slice(0, 50)}..."`);
+    console.log(`TTS: ${mulawAudio.length} bytes for "${text.slice(0, 50)}..."`);
 
     const chunkSize = 160;
     for (let i = 0; i < mulawAudio.length; i += chunkSize) {
