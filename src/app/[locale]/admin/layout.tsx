@@ -83,11 +83,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-50">
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-200 lg:translate-x-0 lg:static lg:inset-auto ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-200 lg:translate-x-0 lg:static lg:inset-auto ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-700">
+        <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-700 shrink-0">
           <div className="w-8 h-8 bg-rose-500 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">SA</span>
           </div>
@@ -96,7 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <p className="text-xs text-slate-400">CallCrafter</p>
           </div>
         </div>
-        <nav className="mt-4 px-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems.map((item) => {
             const isActive =
               item.href === '' ? pathname.endsWith('/admin') : pathname.includes(item.href);
@@ -116,7 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
+        <div className="shrink-0 p-4 border-t border-slate-700">
           <Link
             href={`/${locale}/dashboard`}
             className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
