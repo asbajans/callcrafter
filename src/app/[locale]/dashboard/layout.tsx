@@ -300,8 +300,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <button
                   onClick={() => {
                     const p = window.location.pathname;
-                    const newPath = p.replace(/^\/(en|tr)(\/|$)/, '/tr$2');
-                    if (newPath !== p) window.location.href = newPath;
+                    const m = p.match(/^\/(en|tr)(\/|$)/);
+                    window.location.href = m ? p.replace(/^\/(en|tr)(\/|$)/, '/tr$2') : `/tr${p}`;
                   }}
                   className={`font-medium transition-colors px-1 ${locale === 'tr' ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
                 >
@@ -311,8 +311,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <button
                   onClick={() => {
                     const p = window.location.pathname;
-                    const newPath = p.replace(/^\/(en|tr)(\/|$)/, '/en$2');
-                    if (newPath !== p) window.location.href = newPath;
+                    const m = p.match(/^\/(en|tr)(\/|$)/);
+                    window.location.href = m ? p.replace(/^\/(en|tr)(\/|$)/, '/en$2') : `/en${p}`;
                   }}
                   className={`font-medium transition-colors px-1 ${locale === 'en' ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
                 >

@@ -83,7 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-50">
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-200 lg:translate-x-0 lg:static lg:inset-auto ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-200 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -152,11 +152,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="text-sm text-slate-500">Süper Admin</span>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-slate-500 hover:text-slate-700 cursor-pointer">EN</span>
-                <span className="text-slate-300">|</span>
-                <span className="text-slate-500 hover:text-slate-700 cursor-pointer">TR</span>
-              </div>
               <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center">
                 <span className="text-rose-600 font-semibold text-sm">A</span>
               </div>
