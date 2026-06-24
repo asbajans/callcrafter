@@ -32,6 +32,10 @@
     "providers": "Servis Sağlayıcılar",
     "system": "Sistem Ayarları",
     "dashboard": "Admin Paneli",
+    "tenants": "Tenantlar",
+    "creditPackages": "Kredi Paketleri",
+    "aiProviders": "AI Sağlayıcıları",
+    "usage": "Kullanım",
     "diagnostics": "Test"
   },
   "agent": {

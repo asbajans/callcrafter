@@ -32,6 +32,10 @@
     "providers": "Providers",
     "system": "System Settings",
     "dashboard": "Admin Dashboard",
+    "tenants": "Tenants",
+    "creditPackages": "Credit Packages",
+    "aiProviders": "AI Providers",
+    "usage": "Usage",
     "diagnostics": "Diagnostics"
   },
   "agent": {

@@ -41,14 +41,17 @@ function createSilenceWav(): Buffer {
 async function testTts(url: string): Promise<{ status: string; detail: string; durationMs: number }> {
   const start = Date.now();
   try {
+    const voice = 'en_US-lessac-medium';
     const res = await fetch(`${url}/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Selam, bu bir test konuşmasıdır.', voice: 'tr_TR-dfki-medium' }),
+      body: JSON.stringify({ text: 'This is a test.', voice }),
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
-      return { status: 'error', detail: `HTTP ${res.status}: ${res.statusText}`, durationMs: Date.now() - start };
+      const body = await res.text().catch(() => '');
+      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 300)}` : `HTTP ${res.status}: ${res.statusText}`;
+      return { status: 'error', detail, durationMs: Date.now() - start };
     }
     const contentType = res.headers.get('content-type') || '';
     const isAudio = contentType.includes('audio') || contentType.includes('octet-stream');
@@ -75,9 +78,20 @@ async function testStt(url: string): Promise<{ status: string; detail: string; d
       signal: AbortSignal.timeout(30000),
     });
     if (!res.ok) {
-      return { status: 'error', detail: `HTTP ${res.status}: ${res.statusText}`, durationMs: Date.now() - start };
+      const body = await res.text().catch(() => '');
+      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 300)}` : `HTTP ${res.status}: ${res.statusText}`;
+      return { status: 'error', detail, durationMs: Date.now() - start };
     }
-    const data = await res.json();
+    const raw = await res.text();
+    if (!raw) {
+      return { status: 'error', detail: 'Boş yanıt alındı (JSON bekleniyordu)', durationMs: Date.now() - start };
+    }
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { status: 'error', detail: `JSON ayrıştırma hatası: ${raw.slice(0, 300)}`, durationMs: Date.now() - start };
+    }
     const transcript = data?.text || data?.transcript || '';
     return { status: 'healthy', detail: `Transkript: "${transcript.slice(0, 100)}"`, durationMs: Date.now() - start };
   } catch (err: any) {
