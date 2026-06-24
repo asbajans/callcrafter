@@ -50,7 +50,7 @@ async function testTts(url: string): Promise<{ status: string; detail: string; d
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 300)}` : `HTTP ${res.status}: ${res.statusText}`;
+      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 800)}` : `HTTP ${res.status}: ${res.statusText}`;
       return { status: 'error', detail, durationMs: Date.now() - start };
     }
     const contentType = res.headers.get('content-type') || '';
@@ -59,7 +59,7 @@ async function testTts(url: string): Promise<{ status: string; detail: string; d
     if (text.length > 100 || isAudio) {
       return { status: 'healthy', detail: `Yanıt alındı (${(text.length / 1024).toFixed(1)} KB, ${contentType})`, durationMs: Date.now() - start };
     }
-    return { status: 'degraded', detail: `Beklenmeyen yanıt: ${text.slice(0, 200)}`, durationMs: Date.now() - start };
+    return { status: 'degraded', detail: `Beklenmeyen yanıt: ${text.slice(0, 500)}`, durationMs: Date.now() - start };
   } catch (err: any) {
     return { status: 'error', detail: err?.message || String(err), durationMs: Date.now() - start };
   }
@@ -72,14 +72,14 @@ async function testStt(url: string): Promise<{ status: string; detail: string; d
     const formData = new FormData();
     const blob = new Blob([new Uint8Array(audioBuf)], { type: 'audio/wav' });
     formData.append('audio_file', blob, 'silence.wav');
-    const res = await fetch(`${url}/asr`, {
+    const res = await fetch(`${url}/asr?output=json&language=en&task=transcribe`, {
       method: 'POST',
       body: formData,
       signal: AbortSignal.timeout(30000),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 300)}` : `HTTP ${res.status}: ${res.statusText}`;
+      const detail = body ? `HTTP ${res.status}: ${body.slice(0, 800)}` : `HTTP ${res.status}: ${res.statusText}`;
       return { status: 'error', detail, durationMs: Date.now() - start };
     }
     const raw = await res.text();
