@@ -7,6 +7,7 @@ import * as Select from '@radix-ui/react-select';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { api } from '@/lib/api';
+import { DEFAULT_VOICES, type Voice } from '@/lib/voices';
 import {
   Plus,
   Pencil,
@@ -24,13 +25,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type Voice = {
-  id: string;
-  name: string;
-  language: string;
-  gender?: string;
-};
-
 type Agent = {
   id: string;
   name: string;
@@ -39,7 +33,6 @@ type Agent = {
   voiceId: string | null;
   voiceName: string | null;
   language: string;
-  model: string;
   temperature: number;
   channels: string[];
   greetingMessage: string | null;
@@ -49,7 +42,6 @@ type Agent = {
 };
 
 const LANGUAGES = ['TR', 'EN', 'ES', 'FR', 'DE'] as const;
-const MODELS = ['GPT-4o', 'GPT-4', 'GPT-3.5-Turbo', 'Claude-3.5-Sonnet', 'Claude-3-Haiku'] as const;
 const CHANNEL_OPTIONS = [
   { key: 'voice' as const, labelKey: 'channel_voice', icon: Phone },
   { key: 'whatsapp' as const, labelKey: 'channel_whatsapp', icon: MessageCircle },
@@ -64,7 +56,6 @@ const agentSchema = z.object({
   systemPrompt: z.string().min(1, 'System prompt is required'),
   voiceId: z.string().min(1, 'Voice is required'),
   language: z.enum(LANGUAGES),
-  model: z.enum(MODELS),
   temperature: z.number().min(0).max(2),
   channels: z.array(z.enum(['voice', 'whatsapp', 'instagram', 'web'])).min(1, 'Select at least one channel'),
   greetingMessage: z.string().max(500).optional().default(''),
@@ -79,7 +70,6 @@ const defaultFormData: AgentFormData = {
   systemPrompt: '',
   voiceId: '',
   language: 'EN',
-  model: 'GPT-4o',
   temperature: 0.7,
   channels: ['voice'],
   greetingMessage: '',
@@ -313,39 +303,6 @@ function AgentFormModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">{t('agent.model')}</label>
-                <Select.Root value={form.model} onValueChange={(v) => update('model', v as AgentFormData['model'])}>
-                  <Select.Trigger
-                    className={cn(
-                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                      errors.model ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
-                    )}
-                  >
-                    <Select.Value />
-                    <Select.Icon>
-                      <ChevronDown className="w-4 h-4 text-slate-500" />
-                    </Select.Icon>
-                  </Select.Trigger>
-                  <Select.Portal>
-                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                      <Select.Viewport>
-                        {MODELS.map((m) => (
-                          <Select.Item
-                            key={m}
-                            value={m}
-                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
-                          >
-                            <Select.ItemText>{m}</Select.ItemText>
-                          </Select.Item>
-                        ))}
-                      </Select.Viewport>
-                    </Select.Content>
-                  </Select.Portal>
-                </Select.Root>
-                {errors.model && <p className="text-xs text-red-400">{errors.model}</p>}
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">
                   Temperature: <span className="text-indigo-400">{form.temperature.toFixed(1)}</span>
                 </label>
@@ -491,7 +448,7 @@ export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [voices, setVoices] = useState<Voice[]>([]);
+  const [voices] = useState<Voice[]>(DEFAULT_VOICES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -516,19 +473,9 @@ export default function AgentsPage() {
     }
   }, []);
 
-  const fetchVoices = useCallback(async () => {
-    try {
-      const data = await api.getVoices();
-      setVoices(Array.isArray(data) ? data : data.docs ?? []);
-    } catch {
-      // silently fail — voices are not critical
-    }
-  }, []);
-
   useEffect(() => {
     fetchAgents();
-    fetchVoices();
-  }, [fetchAgents, fetchVoices]);
+  }, [fetchAgents]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -543,7 +490,6 @@ export default function AgentsPage() {
       systemPrompt: agent.systemPrompt ?? '',
       voiceId: agent.voiceId ?? '',
       language: agent.language as AgentFormData['language'],
-      model: agent.model as AgentFormData['model'],
       temperature: agent.temperature,
       channels: agent.channels as AgentFormData['channels'],
       greetingMessage: agent.greetingMessage ?? '',
@@ -668,7 +614,6 @@ export default function AgentsPage() {
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider hidden md:table-cell">{t('agent.voice')}</th>
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">{t('agent.language')}</th>
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">{t('agent.channels')}</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider hidden xl:table-cell">{t('agent.model')}</th>
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">{t('agent.status')}</th>
                   <th className="text-right px-5 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">İşlemler</th>
                 </tr>
@@ -705,7 +650,6 @@ export default function AgentsPage() {
                         {agent.channels.length === 0 && <span className="text-xs text-slate-600">—</span>}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-slate-500 hidden xl:table-cell">{agent.model}</td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className={cn('w-2 h-2 rounded-full shrink-0', statusColors[agent.status] || 'bg-slate-600')} />
