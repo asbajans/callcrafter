@@ -1,6 +1,14 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
 export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
+  // Mark 20260623_200000 as completed to prevent it from running again.
+  // It conflicts with 20260623_220000 (different column naming) and its DROP TABLE would destroy data.
+  await db.execute(sql`
+    INSERT INTO "payload_migrations" ("name", "batch", "created_at", "updated_at")
+    SELECT '20260623_200000', COALESCE((SELECT MAX("batch") FROM "payload_migrations"), 1), NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM "payload_migrations" WHERE "name" = '20260623_200000');
+  `)
+
   // Drop FK constraint from original voice relationship (agents.voice_id → voice_configs)
   await db.execute(sql`ALTER TABLE "agents" DROP CONSTRAINT IF EXISTS "agents_voice_id_voice_configs_id_fk";`)
   await db.execute(sql`DROP INDEX IF EXISTS "agents_voice_idx";`)
