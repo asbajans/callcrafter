@@ -100,8 +100,8 @@ export default function VoicesPage() {
 
       const data = await res.json();
       const newVoice: Voice = {
-        id: data.voiceId || file.name.replace(/\.onnx$/, ''),
-        name: data.displayName || file.name.replace(/\.onnx$/, '').replace(/[-_]/g, ' '),
+        id: data.voiceId || file.name.replace(/\.(onnx|json)$/, ''),
+        name: data.displayName || file.name.replace(/\.(onnx|json)$/, '').replace(/[-_]/g, ' '),
         language: data.language || 'EN',
         builtIn: false,
         modelFile: file.name,

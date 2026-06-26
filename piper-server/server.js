@@ -63,7 +63,11 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     if (ext === '.onnx' && !fs.existsSync(path.join(MODELS_DIR, voiceId + '.json'))) {
       console.log(`Warning: ${voiceId}.json config not found — Piper may still work`);
     }
-    res.json({ success: true, voiceId, file: req.file.originalname, modelsDir: MODELS_DIR, available: listModels() });
+    const parts = voiceId.split('-');
+    const langCode = parts.length > 1 ? parts[0].replace(/_/g, '') : 'EN';
+    const lang = langCode === 'tr' ? 'TR' : langCode === 'en' ? 'EN' : langCode === 'de' ? 'DE' : langCode === 'fr' ? 'FR' : langCode === 'es' ? 'ES' : 'EN';
+    const displayName = voiceId.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    res.json({ success: true, voiceId, displayName, language: lang, file: req.file.originalname, modelsDir: MODELS_DIR, available: listModels() });
   } catch (err) {
     try { fs.unlinkSync(req.file.path); } catch {}
     res.status(500).json({ error: err.message });
