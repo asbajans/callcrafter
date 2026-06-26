@@ -121,9 +121,22 @@ export const Agents: CollectionConfig = {
   ],
   hooks: {
     beforeChange: [
-      ({ data, req }) => {
-        if (!data?.tenant && req.user && (req.user as any).tenant) {
-          data.tenant = (req.user as any).tenant;
+      async ({ data, req }) => {
+        if (!data?.tenant) {
+          if (req.user && (req.user as any).tenant) {
+            data.tenant = (req.user as any).tenant;
+          } else if (['admin', 'super-admin'].includes((req.user as any)?.role)) {
+            try {
+              const tenants = await (req as any).payload.find({
+                collection: 'tenants',
+                limit: 1,
+                depth: 0,
+              });
+              if (tenants?.docs?.length > 0) {
+                data.tenant = tenants.docs[0].id;
+              }
+            } catch {}
+          }
         }
         return data;
       },
