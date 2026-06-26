@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Play, Volume2, Mic, Upload, Check, Loader2, AlertCircle } from 'lucide-react';
+import { useRef } from 'react';
+import { Play, Square, Volume2, Upload, Loader2, AlertCircle } from 'lucide-react';
 import { DEFAULT_VOICES, type Voice } from '@/lib/voices';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -19,7 +20,9 @@ const LANG_ORDER = ['TR', 'EN', 'DE', 'FR', 'ES'];
 
 export default function VoicesPage() {
   const t = useTranslations();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const [customVoices, setCustomVoices] = useState<Voice[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -30,23 +33,43 @@ export default function VoicesPage() {
   })).filter(g => g.voices.length > 0);
 
   async function handlePlay(voiceId: string) {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (playing === voiceId) {
       setPlaying(null);
       return;
     }
-    setPlaying(voiceId);
+    setLoadingVoice(voiceId);
     try {
-      const res = await fetch('/api/admin/diagnostics?type=tts', { cache: 'no-store' });
-      const data = await res.json();
-      if (data?.results?.tts?.status === 'healthy') {
-        toast.success(`${voiceId} — sunucu yanıt verdi`);
-      } else {
-        toast.error(`Ses testi başarısız: ${data?.results?.tts?.detail || 'Bilinmeyen hata'}`);
+      const res = await fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent('Merhaba, bu bir ses testidir.')}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Ses alınamadı' }));
+        toast.error(err.error || 'Ses testi başarısız');
+        setLoadingVoice(null);
+        return;
       }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setPlaying(voiceId);
+      setLoadingVoice(null);
+      audio.onended = () => {
+        setPlaying(null);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        toast.error('Ses oynatılamadı');
+        setPlaying(null);
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
     } catch (err: any) {
       toast.error(err.message);
-    } finally {
       setPlaying(null);
+      setLoadingVoice(null);
     }
   }
 
@@ -54,8 +77,9 @@ export default function VoicesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.onnx')) {
-      toast.error('Sadece .onnx model dosyaları yüklenebilir');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'onnx' && ext !== 'json') {
+      toast.error('Sadece .onnx ve .json dosyaları yüklenebilir');
       return;
     }
 
@@ -102,7 +126,7 @@ export default function VoicesPage() {
         <label className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-500 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer">
           {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
           {uploading ? 'Yükleniyor...' : 'Ses Yükle'}
-          <input type="file" accept=".onnx" className="hidden" onChange={handleUpload} disabled={uploading} />
+          <input type="file" accept=".onnx,.json" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
       </div>
 
@@ -148,7 +172,13 @@ export default function VoicesPage() {
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors shrink-0 ml-2"
                     title={playing === voice.id ? 'Durdur' : 'Test et'}
                   >
-                    {playing === voice.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                    {loadingVoice === voice.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : playing === voice.id ? (
+                      <Square className="w-4 h-4" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-600 font-mono truncate">{voice.id}</p>

@@ -45,6 +45,31 @@ app.get('/voices', (_req, res) => {
   res.json({ voices: listModels(), modelsDir: MODELS_DIR });
 });
 
+const multer = require('multer');
+const upload = multer({ dest: os.tmpdir() });
+
+app.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file required' });
+  const voiceId = req.body.voiceId || req.file.originalname.replace(/\.(onnx|json)$/i, '');
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  if (ext !== '.onnx' && ext !== '.json') {
+    try { fs.unlinkSync(req.file.path); } catch {}
+    return res.status(400).json({ error: `Unsupported file type: ${ext} (only .onnx and .json)` });
+  }
+  const destPath = path.join(MODELS_DIR, voiceId + ext);
+  try {
+    fs.copyFileSync(req.file.path, destPath);
+    try { fs.unlinkSync(req.file.path); } catch {}
+    if (ext === '.onnx' && !fs.existsSync(path.join(MODELS_DIR, voiceId + '.json'))) {
+      console.log(`Warning: ${voiceId}.json config not found — Piper may still work`);
+    }
+    res.json({ success: true, voiceId, file: req.file.originalname, modelsDir: MODELS_DIR, available: listModels() });
+  } catch (err) {
+    try { fs.unlinkSync(req.file.path); } catch {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/tts', async (req, res) => {
   const { text, voice } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
