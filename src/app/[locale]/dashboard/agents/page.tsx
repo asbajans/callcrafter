@@ -508,7 +508,18 @@ export default function AgentsPage() {
     setSubmitting(true);
     try {
       const voiceName = voices.find(v => v.id === data.voiceId)?.name || data.voiceId;
-      const payload = { ...data, voiceName };
+      const payload = {
+        name: data.name,
+        description: data.description,
+        systemPrompt: data.systemPrompt,
+        voice: data.voiceId,
+        voiceName,
+        language: data.language.toLowerCase(),
+        temperature: data.temperature,
+        channels: data.channels,
+        greetingMessage: data.greetingMessage,
+        status: data.status.toLowerCase(),
+      };
       if (editingId) {
         await api.updateAgent(editingId, payload);
       } else {
