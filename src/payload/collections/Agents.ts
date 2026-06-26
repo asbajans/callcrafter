@@ -28,9 +28,14 @@ export const Agents: CollectionConfig = {
     },
     {
       name: 'voice',
-      type: 'relationship',
-      relationTo: 'voice-configs',
+      type: 'text',
       required: true,
+      label: 'Voice ID (Piper)',
+    },
+    {
+      name: 'voiceName',
+      type: 'text',
+      label: 'Voice Display Name',
     },
     {
       name: 'language',
@@ -114,6 +119,16 @@ export const Agents: CollectionConfig = {
       type: 'json',
     },
   ],
+  hooks: {
+    beforeChange: [
+      ({ data, req }) => {
+        if (!data?.tenant && req.user && (req.user as any).tenant) {
+          data.tenant = (req.user as any).tenant;
+        }
+        return data;
+      },
+    ],
+  },
   access: {
     read: ({ req: { user } }) => {
       if (!user) return false

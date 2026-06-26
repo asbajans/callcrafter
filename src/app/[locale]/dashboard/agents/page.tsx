@@ -507,10 +507,12 @@ export default function AgentsPage() {
   const handleFormSubmit = async (data: AgentFormData) => {
     setSubmitting(true);
     try {
+      const voiceName = voices.find(v => v.id === data.voiceId)?.name || data.voiceId;
+      const payload = { ...data, voiceName };
       if (editingId) {
-        await api.updateAgent(editingId, data);
+        await api.updateAgent(editingId, payload);
       } else {
-        await api.createAgent(data);
+        await api.createAgent(payload);
       }
       toast.success(editingId ? 'Agent updated successfully' : 'Agent created successfully');
       setModalOpen(false);
