@@ -34,6 +34,10 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`ALTER TABLE "tenant_provider_access" DROP CONSTRAINT IF EXISTS "tenant_provider_access_provider_ai_providers_fk";`)
   await db.execute(sql`ALTER TABLE "tenant_provider_access" RENAME COLUMN "provider" TO "provider_id";`)
   await db.execute(sql`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_provider_access_provider_id_ai_providers_fk') THEN ALTER TABLE "tenant_provider_access" ADD CONSTRAINT "tenant_provider_access_provider_id_ai_providers_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."ai_providers"("id") ON DELETE set null ON UPDATE no action; END IF; END $$;`)
+
+  // -- agents.model: enum -> varchar (allows any model ID, e.g. OpenRouter models) --
+  await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" TYPE varchar;`)
+  await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" SET DEFAULT 'gpt-4o';`)
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
@@ -60,4 +64,8 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   await db.execute(sql`ALTER TABLE "tenant_provider_access" DROP CONSTRAINT IF EXISTS "tenant_provider_access_provider_id_ai_providers_fk";`)
   await db.execute(sql`ALTER TABLE "tenant_provider_access" RENAME COLUMN "provider_id" TO "provider";`)
   await db.execute(sql`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_provider_access_provider_ai_providers_fk') THEN ALTER TABLE "tenant_provider_access" ADD CONSTRAINT "tenant_provider_access_provider_ai_providers_fk" FOREIGN KEY ("provider") REFERENCES "public"."ai_providers"("id") ON DELETE set null ON UPDATE no action; END IF; END $$;`)
+
+  // -- agents.model: revert to enum --
+  await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" TYPE "enum_agents_model" USING "model"::text::"enum_agents_model";`)
+  await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" SET DEFAULT 'gpt-4o'::"enum_agents_model";`)
 }

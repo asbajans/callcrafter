@@ -51,16 +51,11 @@ export const Agents: CollectionConfig = {
     },
     {
       name: 'model',
-      type: 'select',
-      options: [
-        { label: 'GPT-4', value: 'gpt-4' },
-        { label: 'GPT-4o', value: 'gpt-4o' },
-        { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-        { label: 'Claude 3 Opus', value: 'claude-3-opus' },
-        { label: 'Claude 3 Sonnet', value: 'claude-3-sonnet' },
-        { label: 'Claude 3 Haiku', value: 'claude-3-haiku' },
-      ],
+      type: 'text',
       defaultValue: 'gpt-4o',
+      admin: {
+        description: 'Model ID (örn: gpt-4o, claude-3-sonnet, openai/gpt-4o, mistralai/mistral-7b-instruct)',
+      },
     },
     {
       name: 'temperature',
