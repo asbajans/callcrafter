@@ -22,6 +22,7 @@ export const AiProviders: CollectionConfig = {
       name: 'providerType',
       type: 'select',
       required: true,
+      defaultValue: 'openai',
       options: [
         { label: 'OpenAI', value: 'openai' },
         { label: 'Anthropic', value: 'anthropic' },
