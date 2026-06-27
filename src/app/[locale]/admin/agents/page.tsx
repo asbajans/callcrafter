@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Bot, ShieldAlert } from 'lucide-react';
+import { Bot, ShieldAlert, Check, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Provider {
+  id: number;
+  name: string;
+  providerType?: string;
+}
 
 interface Agent {
   id: number;
@@ -10,6 +17,7 @@ interface Agent {
   description?: string | null;
   language?: string | null;
   model?: string | null;
+  provider?: Provider | number | null;
   status?: string | null;
   createdAt: string;
 }
@@ -23,17 +31,24 @@ const statusColors: Record<string, string> = {
 export default function AdminAgentsPage() {
   const t = useTranslations();
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
-  const fetchAgents = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/agents?limit=100&sort=-createdAt&depth=0');
-      if (!res.ok) throw new Error('Failed to fetch agents');
-      const data = await res.json();
-      setAgents(data.docs || []);
+      const [agentsRes, provRes] = await Promise.all([
+        fetch('/api/agents?limit=100&sort=-createdAt&depth=1'),
+        fetch('/api/ai-providers?limit=100&depth=0'),
+      ]);
+      if (!agentsRes.ok) throw new Error('Failed to fetch agents');
+      const agentsData = await agentsRes.json();
+      const provData = provRes.ok ? (await provRes.json()).docs || [] : [];
+      setAgents(agentsData.docs || []);
+      setProviders(provData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -41,7 +56,47 @@ export default function AdminAgentsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchAgents() }, [fetchAgents]);
+  useEffect(() => { fetchData() }, [fetchData]);
+
+  const changeProvider = async (agentId: number, providerId: number | null) => {
+    setSavingId(agentId);
+    try {
+      const res = await fetch(`/api/agents/${agentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ provider: providerId }),
+      });
+      if (!res.ok) throw new Error('Failed to update provider');
+      setAgents(prev => prev.map(a =>
+        a.id === agentId
+          ? { ...a, provider: providers.find(p => p.id === providerId) || null }
+          : a
+      ));
+      toast.success('Provider güncellendi');
+    } catch {
+      toast.error('Provider güncellenirken hata oluştu');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const getProviderName = (agent: Agent): string => {
+    if (!agent.provider) return '—';
+    if (typeof agent.provider === 'object' && agent.provider !== null) {
+      return (agent.provider as Provider).name;
+    }
+    const found = providers.find(p => p.id === agent.provider);
+    return found?.name || `ID: ${agent.provider}`;
+  };
+
+  const getProviderId = (agent: Agent): number | null => {
+    if (!agent.provider) return null;
+    if (typeof agent.provider === 'object' && agent.provider !== null) {
+      return (agent.provider as Provider).id;
+    }
+    return agent.provider as number;
+  };
 
   return (
     <div className="space-y-6">
@@ -70,6 +125,7 @@ export default function AdminAgentsPage() {
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Asistan Adı</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Dil</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Provider</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Model</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Durum</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Oluşturulma</th>
@@ -79,14 +135,14 @@ export default function AdminAgentsPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <td key={j} className="px-6 py-3"><span className="inline-block w-20 h-4 bg-slate-200 rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
               ) : agents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
                     <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     {t('common.noData')}
                   </td>
@@ -96,6 +152,15 @@ export default function AdminAgentsPage() {
                   <tr key={agent.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-3 font-medium text-slate-900">{agent.name}</td>
                     <td className="px-6 py-3 text-slate-600">{agent.language || '—'}</td>
+                    <td className="px-6 py-3">
+                      <InlineProviderSelect
+                        currentId={getProviderId(agent)}
+                        currentName={getProviderName(agent)}
+                        providers={providers}
+                        saving={savingId === agent.id}
+                        onChange={(pid) => changeProvider(agent.id, pid)}
+                      />
+                    </td>
                     <td className="px-6 py-3 text-slate-600 text-xs font-mono">{agent.model || '—'}</td>
                     <td className="px-6 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[agent.status || 'inactive'] || 'bg-gray-100 text-gray-600'}`}>
@@ -112,6 +177,66 @@ export default function AdminAgentsPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function InlineProviderSelect({
+  currentId,
+  currentName,
+  providers,
+  saving,
+  onChange,
+}: {
+  currentId: number | null;
+  currentName: string;
+  providers: Provider[];
+  saving: boolean;
+  onChange: (providerId: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentId ?? 0);
+
+  if (saving) {
+    return <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setValue(currentId ?? 0); setEditing(true); }}
+        className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer"
+      >
+        {currentName}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => setValue(parseInt(e.target.value) || 0)}
+        className="text-xs border border-slate-300 rounded px-1 py-0.5 bg-white"
+        autoFocus
+      >
+        <option value={0}>— Yok —</option>
+        {providers.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={() => { onChange(value || null); setEditing(false); }}
+        className="p-0.5 text-green-600 hover:text-green-800"
+      >
+        <Check className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="p-0.5 text-red-500 hover:text-red-700"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
