@@ -4,6 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'CallCrafter AI - Akıllı Çağrı Merkezi',
   description: 'Yapay zeka destekli çok kanallı iletişim platformu',
+  icons: [{ rel: 'icon', url: '/icon.svg' }],
 };
 
 export default function RootLayout({
