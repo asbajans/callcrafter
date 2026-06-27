@@ -38,6 +38,10 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   // -- agents.model: enum -> varchar (allows any model ID, e.g. OpenRouter models) --
   await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" TYPE varchar;`)
   await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" SET DEFAULT 'gpt-4o';`)
+
+  // -- agents.provider: add relationship to ai-providers --
+  await db.execute(sql`ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "provider_id" integer;`)
+  await db.execute(sql`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agents_provider_id_ai_providers_fk') THEN ALTER TABLE "agents" ADD CONSTRAINT "agents_provider_id_ai_providers_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."ai_providers"("id") ON DELETE set null ON UPDATE no action; END IF; END $$;`)
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
@@ -68,4 +72,8 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   // -- agents.model: revert to enum --
   await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" TYPE "enum_agents_model" USING "model"::text::"enum_agents_model";`)
   await db.execute(sql`ALTER TABLE "agents" ALTER COLUMN "model" SET DEFAULT 'gpt-4o'::"enum_agents_model";`)
+
+  // -- agents.provider: drop relationship --
+  await db.execute(sql`ALTER TABLE "agents" DROP CONSTRAINT IF EXISTS "agents_provider_id_ai_providers_fk";`)
+  await db.execute(sql`ALTER TABLE "agents" DROP COLUMN IF EXISTS "provider_id";`)
 }

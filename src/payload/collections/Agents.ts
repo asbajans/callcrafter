@@ -50,6 +50,14 @@ export const Agents: CollectionConfig = {
       defaultValue: 'tr',
     },
     {
+      name: 'provider',
+      type: 'relationship',
+      relationTo: 'ai-providers' as any,
+      admin: {
+        description: 'AI Provider (OpenAI, Anthropic, OpenRouter etc.)',
+      },
+    },
+    {
       name: 'model',
       type: 'text',
       defaultValue: 'gpt-4o',
