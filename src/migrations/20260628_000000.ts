@@ -1,13 +1,17 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
 // Add column and FK to payload_locked_documents_rels if missing
+// Guards every operation: table may not exist, column may already exist, FK may already exist
 const addLockRelColumn = (tableCol: string, constraint: string, refTable: string) => sql`
   DO $$ BEGIN
-    ALTER TABLE "payload_locked_documents_rels" ADD COLUMN IF NOT EXISTS "${sql.raw(tableCol)}" integer;
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payload_locked_documents_rels' AND column_name = '${sql.raw(tableCol)}')
-       AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${sql.raw(constraint)}') THEN
-      EXECUTE format('ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I(id) ON DELETE cascade ON UPDATE no action',
-        '${sql.raw(constraint)}', '${sql.raw(tableCol)}', '${sql.raw(refTable)}');
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'payload_locked_documents_rels') THEN
+      EXECUTE 'ALTER TABLE "payload_locked_documents_rels" ADD COLUMN IF NOT EXISTS "${sql.raw(tableCol)}" integer';
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payload_locked_documents_rels' AND column_name = '${sql.raw(tableCol)}')
+         AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${sql.raw(constraint)}')
+         AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '${sql.raw(refTable)}') THEN
+        EXECUTE format('ALTER TABLE "payload_locked_documents_rels" ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES "public".%I(id) ON DELETE cascade ON UPDATE no action',
+          '${sql.raw(constraint)}', '${sql.raw(tableCol)}', '${sql.raw(refTable)}');
+      END IF;
     END IF;
   END $$;
 `
