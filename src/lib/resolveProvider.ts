@@ -8,19 +8,21 @@ export interface ProviderConfig {
   model: string
 }
 
-const modelMap: Record<string, string> = {
-  'gpt-4': 'openai',
-  'gpt-4o': 'openai',
-  'gpt-4o-mini': 'openai',
-  'claude-3-opus': 'anthropic',
-  'claude-3-sonnet': 'anthropic',
-  'claude-3-haiku': 'anthropic',
+const DEFAULT_BASE_URLS: Record<string, string> = {
+  openrouter: 'https://openrouter.ai/api/v1',
+  ollama: 'http://localhost:11434/v1',
 }
 
 function getProviderId(agent: any): number | null {
   if (!agent.provider) return null
   if (typeof agent.provider === 'object') return (agent.provider as any).id
   return agent.provider
+}
+
+function detectProviderType(apiKey: string, declaredType: string): string {
+  if (apiKey.startsWith('sk-or-v1')) return 'openrouter'
+  if (apiKey.startsWith('sk-ant-')) return 'anthropic'
+  return declaredType
 }
 
 export async function resolveProviderConfig(agent: any): Promise<ProviderConfig> {
@@ -37,23 +39,16 @@ export async function resolveProviderConfig(agent: any): Promise<ProviderConfig>
     })
     const prov = providers.docs[0] as any
     if (prov && prov.apiKey) {
-      return {
-        providerType: prov.providerType || 'openai',
-        apiKey: prov.apiKey,
-        baseUrl: prov.baseUrl || undefined,
-        model,
-      }
+      const providerType = detectProviderType(prov.apiKey, prov.providerType || 'openai')
+      const baseUrl = prov.baseUrl || DEFAULT_BASE_URLS[providerType] || undefined
+      return { providerType, apiKey: prov.apiKey, baseUrl, model }
     }
   }
 
   // Fallback: env vars
-  const fallbackProvider = modelMap[model] || 'openai'
-  const envKey = fallbackProvider === 'anthropic' ? process.env.ANTHROPIC_API_KEY
-    : process.env.OPENAI_API_KEY
+  const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
+  const providerType = detectProviderType(apiKey, 'openai')
+  const baseUrl = DEFAULT_BASE_URLS[providerType] || undefined
 
-  return {
-    providerType: fallbackProvider,
-    apiKey: envKey || '',
-    model,
-  }
+  return { providerType, apiKey, baseUrl, model }
 }
