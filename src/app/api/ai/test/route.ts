@@ -62,18 +62,36 @@ export async function POST(req: NextRequest) {
 
     const provider = (agent as any).provider
     let providerType = 'openai'
-    let apiKey = process.env.OPENAI_API_KEY || ''
+    let apiKey = ''
     let baseUrl: string | undefined
 
     if (provider && typeof provider === 'object') {
       const p = provider as any
       providerType = p.providerType || 'openai'
+      const storedKey = (p as any).apiKey
+      if (storedKey && typeof storedKey === 'string' && storedKey.startsWith('sk-')) {
+        apiKey = storedKey
+      }
+    }
+
+    if (!apiKey) {
       if (providerType === 'anthropic') {
-        apiKey = process.env.ANTHROPIC_API_KEY || apiKey
+        apiKey = process.env.ANTHROPIC_API_KEY || ''
       } else if (providerType === 'openrouter') {
         baseUrl = 'https://openrouter.ai/api/v1'
-        apiKey = process.env.OPENROUTER_API_KEY || apiKey
+        apiKey = process.env.OPENROUTER_API_KEY || ''
+      } else {
+        apiKey = process.env.OPENAI_API_KEY || ''
       }
+    }
+
+    if (!apiKey) {
+      const keyName = providerType === 'anthropic' ? 'ANTHROPIC_API_KEY'
+        : providerType === 'openrouter' ? 'OPENROUTER_API_KEY'
+        : 'OPENAI_API_KEY'
+      return NextResponse.json({
+        error: `${keyName} environment variable is not configured. Add it in Portainer to use AI test.`,
+      }, { status: 500 })
     }
 
     let trainingContext = ''
