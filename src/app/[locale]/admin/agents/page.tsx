@@ -109,7 +109,11 @@ export default function AdminAgentsPage() {
     const pid = getProviderId(agent);
     if (!pid) return [];
     const provider = providers.find(p => p.id === pid);
-    return provider?.models || [];
+    if (!provider?.models) return [];
+    return provider.models.map((m: any) => {
+      if (typeof m === 'string') return { name: m, modelId: m, creditCost: 1 };
+      return m as ProviderModel;
+    });
   };
 
   const changeModel = async (agentId: number, model: string) => {

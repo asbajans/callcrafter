@@ -38,6 +38,9 @@ export const AiProviders: CollectionConfig = {
       admin: {
         hidden: true,
       },
+      access: {
+        read: () => false,
+      },
     },
     {
       name: 'baseUrl',
