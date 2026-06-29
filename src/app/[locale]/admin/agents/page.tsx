@@ -124,24 +124,15 @@ export default function AdminAgentsPage() {
   const changeTts = async (agentId: number, ttsProvider: string) => {
     setSavingId(agentId);
     try {
-      const currentAgent = agents.find(a => a.id === agentId);
-      const body: Record<string, any> = { ttsProvider };
-      if (ttsProvider === 'elevenlabs') {
-        const voice = currentAgent?.voice || '';
-        const isPiperVoice = /^[a-z]{2}_[A-Z]{2}/.test(voice);
-        if (!voice || isPiperVoice) {
-          body.voice = '21m00Tcm4TlvDq8ikWAM';
-        }
-      }
       const res = await fetch(`/api/agents/${agentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ttsProvider }),
       });
       if (!res.ok) throw new Error('Failed to update TTS provider');
       setAgents(prev => prev.map(a =>
-        a.id === agentId ? { ...a, ttsProvider, voice: body.voice || a.voice } : a
+        a.id === agentId ? { ...a, ttsProvider } : a
       ));
       toast.success('TTS sağlayıcı güncellendi');
     } catch {

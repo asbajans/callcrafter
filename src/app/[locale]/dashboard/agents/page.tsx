@@ -106,7 +106,6 @@ function AgentFormModal({
   voices,
   providers,
   loading,
-  elevenLabsVoices,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -115,22 +114,51 @@ function AgentFormModal({
   voices: (Voice & { provider?: string })[];
   providers: AiProvider[];
   loading: boolean;
-  elevenLabsVoices: { id: string; name: string; provider?: string }[];
 }) {
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof AgentFormData, string>>>({});
+  const [elevenLabsVoices, setElevenLabsVoices] = useState<{ id: string; name: string; provider?: string }[]>([]);
+  const [loadingElevenLabs, setLoadingElevenLabs] = useState(false);
+  const [elevenLabsError, setElevenLabsError] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(initialData ?? defaultFormData);
     setErrors({});
+    setElevenLabsVoices([]);
+    setElevenLabsError(null);
   }, [initialData, open]);
+
+  const fetchElevenLabsVoices = useCallback(async () => {
+    setLoadingElevenLabs(true);
+    setElevenLabsError(null);
+    try {
+      const data = await api.getVoices();
+      setElevenLabsVoices(data.voices.filter((v) => v.provider === 'elevenlabs'));
+      if (data.voices.filter((v) => v.provider === 'elevenlabs').length === 0) {
+        setElevenLabsError('ElevenLabs ses bulunamadı. API anahtarınızı kontrol edin.');
+      }
+    } catch {
+      setElevenLabsError('ElevenLabs sesleri alınamadı. API bağlantısını kontrol edin.');
+    } finally {
+      setLoadingElevenLabs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (form.ttsProvider === 'elevenlabs' && elevenLabsVoices.length === 0 && !loadingElevenLabs) {
+      fetchElevenLabsVoices();
+    }
+  }, [form.ttsProvider, fetchElevenLabsVoices, elevenLabsVoices.length, loadingElevenLabs]);
 
   const update = <K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
       if (key === 'provider') {
         next.model = undefined;
+      }
+      if (key === 'ttsProvider' && value !== 'elevenlabs') {
+        next.voice = next.voice || '';
       }
       return next;
     });
@@ -160,7 +188,7 @@ function AgentFormModal({
   const selectedProvider = providers.find(p => p.id === form.provider);
   const availableModels = selectedProvider?.models || [];
 
-  const useElevenLabs = form.ttsProvider === 'elevenlabs' || (form.ttsProvider !== 'piper' && elevenLabsVoices.length > 0);
+  const useElevenLabs = form.ttsProvider === 'elevenlabs';
   const availableVoices = useElevenLabs ? elevenLabsVoices : voices;
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
@@ -270,40 +298,61 @@ function AgentFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">{t('agent.voice')}</label>
-                <Select.Root value={form.voice} onValueChange={(v) => update('voice', v)}>
-                  <Select.Trigger
-                    className={cn(
-                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                      errors.voice ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
-                    )}
-                  >
-                    <Select.Value placeholder="Ses seç" />
-                    <Select.Icon>
-                      <ChevronDown className="w-4 h-4 text-slate-500" />
-                    </Select.Icon>
-                  </Select.Trigger>
-                  <Select.Portal>
-                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                      <Select.Viewport>
-                        {availableVoices.map((v) => (
-                          <Select.Item
-                            key={v.id}
-                            value={v.id}
-                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
-                          >
-                            <Select.ItemText>
-                              {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : `(${(v as any).language || ''})`}
-                            </Select.ItemText>
-                          </Select.Item>
-                        ))}
-                        {availableVoices.length === 0 && (
-                          <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
-                        )}
-                      </Select.Viewport>
-                    </Select.Content>
-                  </Select.Portal>
-                </Select.Root>
-                    {errors.voice && <p className="text-xs text-red-400">{errors.voice}</p>}
+                {loadingElevenLabs ? (
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.06] text-sm text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    ElevenLabs sesleri yükleniyor...
+                  </div>
+                ) : elevenLabsError ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {elevenLabsError}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchElevenLabsVoices}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 self-start"
+                    >
+                      Tekrar dene
+                    </button>
+                  </div>
+                ) : (
+                  <Select.Root value={form.voice} onValueChange={(v) => update('voice', v)}>
+                    <Select.Trigger
+                      className={cn(
+                        'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                        errors.voice ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
+                      )}
+                    >
+                      <Select.Value placeholder="Ses seç" />
+                      <Select.Icon>
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                      <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                        <Select.Viewport>
+                          {availableVoices.map((v) => (
+                            <Select.Item
+                              key={v.id}
+                              value={v.id}
+                              className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                            >
+                              <Select.ItemText>
+                                {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : `(${(v as any).language || ''})`}
+                              </Select.ItemText>
+                            </Select.Item>
+                          ))}
+                          {availableVoices.length === 0 && (
+                            <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
+                          )}
+                        </Select.Viewport>
+                      </Select.Content>
+                    </Select.Portal>
+                  </Select.Root>
+                )}
+                {errors.voice && <p className="text-xs text-red-400">{errors.voice}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -593,8 +642,7 @@ export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [voices, setVoices] = useState<(Voice & { provider?: string })[]>([]);
-  const [elevenLabsVoices, setElevenLabsVoices] = useState<{ id: string; name: string; provider?: string }[]>([]);
+  const [voices] = useState<(Voice & { provider?: string })[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -631,21 +679,10 @@ export default function AgentsPage() {
     }
   }, []);
 
-  const fetchVoices = useCallback(async () => {
-    try {
-      const data = await api.getVoices();
-      setVoices(data.voices.filter((v) => v.provider !== 'elevenlabs') as any);
-      setElevenLabsVoices(data.voices.filter((v) => v.provider === 'elevenlabs'));
-    } catch {
-      // non-critical, use fallback
-    }
-  }, []);
-
   useEffect(() => {
     fetchAgents();
     fetchProviders();
-    fetchVoices();
-  }, [fetchAgents, fetchProviders, fetchVoices]);
+  }, [fetchAgents, fetchProviders]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -681,7 +718,7 @@ export default function AgentsPage() {
   const handleFormSubmit = async (data: AgentFormData) => {
     setSubmitting(true);
     try {
-      const voiceName = voices.find(v => v.id === data.voice)?.name || elevenLabsVoices.find(v => v.id === data.voice)?.name || data.voice;
+      const voiceName = data.voice;
       const payload = {
         name: data.name,
         description: data.description,
@@ -897,7 +934,6 @@ export default function AgentsPage() {
         voices={voices}
         providers={providers}
         loading={submitting}
-        elevenLabsVoices={elevenLabsVoices}
       />
 
       {testAgent && (
