@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Bot, ShieldAlert, Check, X, Loader2 } from 'lucide-react';
+import { Bot, ShieldAlert, Check, X, Loader2, Play, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import AgentTestModal from './AgentTestModal';
 
 interface ProviderModel {
   name: string;
@@ -42,6 +43,8 @@ export default function AdminAgentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [testAgent, setTestAgent] = useState<Agent | null>(null);
+  const [testDefaultTab, setTestDefaultTab] = useState<'text' | 'voice'>('text');
 
   const fetchData = useCallback(async () => {
     try {
@@ -167,6 +170,7 @@ export default function AdminAgentsPage() {
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Provider</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Model</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Durum</th>
+                <th className="text-center px-6 py-3 text-xs font-medium text-slate-500 uppercase">Test</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Oluşturulma</th>
               </tr>
             </thead>
@@ -174,14 +178,14 @@ export default function AdminAgentsPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-6 py-3"><span className="inline-block w-20 h-4 bg-slate-200 rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
               ) : agents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                     <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     {t('common.noData')}
                   </td>
@@ -213,6 +217,24 @@ export default function AdminAgentsPage() {
                         {agent.status || 'inactive'}
                       </span>
                     </td>
+                    <td className="px-6 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent(agent); }}
+                          className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
+                          title="Yazılı Test"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent(agent); }}
+                          className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                          title="Sesli Test"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-6 py-3 text-slate-500 text-xs">
                       {new Date(agent.createdAt).toLocaleDateString()}
                     </td>
@@ -223,6 +245,14 @@ export default function AdminAgentsPage() {
           </table>
         </div>
       </div>
+
+      {testAgent && (
+        <AgentTestModal
+          agent={testAgent}
+          defaultTab={testDefaultTab}
+          onClose={() => { setTestAgent(null); setTestDefaultTab('text'); }}
+        />
+      )}
     </div>
   );
 }
