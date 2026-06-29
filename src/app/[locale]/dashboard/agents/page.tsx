@@ -41,6 +41,7 @@ type Agent = {
   greetingMessage: string | null;
   status: string;
   model?: string | null;
+  ttsProvider?: string | null;
   provider?: number | { id: number } | null;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +68,7 @@ const agentSchema = z.object({
   status: z.enum(['Active', 'Inactive', 'Testing']),
   provider: z.number().optional(),
   model: z.string().optional(),
+  ttsProvider: z.enum(['auto', 'elevenlabs', 'piper']).optional().default('auto'),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
@@ -93,6 +95,7 @@ const defaultFormData: AgentFormData = {
   status: 'Active',
   provider: undefined,
   model: undefined,
+  ttsProvider: 'auto',
 };
 
 function AgentFormModal({
@@ -426,6 +429,41 @@ function AgentFormModal({
             </div>
 
             <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Ses Motoru</label>
+              <Select.Root
+                value={form.ttsProvider || 'auto'}
+                onValueChange={(v) => update('ttsProvider', v as 'auto' | 'elevenlabs' | 'piper')}
+              >
+                <Select.Trigger
+                  className={cn(
+                    'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                    'border-white/[0.1] bg-white/[0.06]'
+                  )}
+                >
+                  <Select.Value />
+                  <Select.Icon>
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  </Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                    <Select.Viewport>
+                      <Select.Item value="auto" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                        <Select.ItemText>Otomatik (önce ElevenLabs)</Select.ItemText>
+                      </Select.Item>
+                      <Select.Item value="elevenlabs" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                        <Select.ItemText>ElevenLabs</Select.ItemText>
+                      </Select.Item>
+                      <Select.Item value="piper" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                        <Select.ItemText>Piper (yerel)</Select.ItemText>
+                      </Select.Item>
+                    </Select.Viewport>
+                  </Select.Content>
+                </Select.Portal>
+              </Select.Root>
+            </div>
+
+            <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">{t('agent.channels')}</label>
               <div className="flex flex-wrap gap-2">
                 {CHANNEL_OPTIONS.map((ch) => {
@@ -563,7 +601,7 @@ export default function AgentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voice?: string | null } | null>(null);
+  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voice?: string | null; ttsProvider?: string | null } | null>(null);
   const [testDefaultTab, setTestDefaultTab] = useState<'text' | 'voice'>('text');
 
   const fetchAgents = useCallback(async () => {
@@ -612,6 +650,7 @@ export default function AgentsPage() {
       status: agent.status as AgentFormData['status'],
       provider: providerId || undefined,
       model: agent.model || undefined,
+      ttsProvider: (agent.ttsProvider as 'auto' | 'elevenlabs' | 'piper') || 'auto',
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -638,8 +677,9 @@ export default function AgentsPage() {
         greetingMessage: data.greetingMessage,
         status: data.status.toLowerCase(),
         ...(data.provider ? { provider: data.provider } : {}),
-        ...(data.model ? { model: data.model } : {}),
-      };
+      ...(data.model ? { model: data.model } : {}),
+      ttsProvider: data.ttsProvider || 'auto',
+    };
       if (editingId) {
         await api.updateAgent(editingId, payload);
       } else {
@@ -768,7 +808,12 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
-                      {agent.voiceName || agent.voice || '—'}
+                      <span>{agent.voiceName || agent.voice || '—'}</span>
+                      {agent.ttsProvider && agent.ttsProvider !== 'auto' && (
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-medium">
+                          {agent.ttsProvider === 'elevenlabs' ? 'EL' : 'Piper'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
                       <span className="text-xs font-medium text-slate-400 bg-white/[0.06] px-2 py-1 rounded-lg">{agent.language}</span>
@@ -792,14 +837,14 @@ export default function AgentsPage() {
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice }); }}
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice, ttsProvider: agent.ttsProvider }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
                           title="Yazılı Test"
                         >
                           <MessageSquare className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice }); }}
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice, ttsProvider: agent.ttsProvider }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                           title="Sesli Test"
                         >

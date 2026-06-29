@@ -26,6 +26,7 @@ interface Agent {
   language?: string | null;
   model?: string | null;
   voice?: string | null;
+  ttsProvider?: string | null;
   provider?: Provider | number | null;
   status?: string | null;
   createdAt: string;
@@ -120,6 +121,41 @@ export default function AdminAgentsPage() {
     });
   };
 
+  const changeTts = async (agentId: number, ttsProvider: string) => {
+    setSavingId(agentId);
+    try {
+      const res = await fetch(`/api/agents/${agentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ttsProvider }),
+      });
+      if (!res.ok) throw new Error('Failed to update TTS provider');
+      setAgents(prev => prev.map(a =>
+        a.id === agentId ? { ...a, ttsProvider } : a
+      ));
+      toast.success('TTS sağlayıcı güncellendi');
+    } catch {
+      toast.error('TTS sağlayıcı güncellenirken hata oluştu');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const ttsLabel = (val: string | null | undefined): string => {
+    switch (val) {
+      case 'elevenlabs': return 'ElevenLabs';
+      case 'piper': return 'Piper';
+      default: return 'Otomatik';
+    }
+  };
+
+  const cycleTts = (current: string | null | undefined): string => {
+    const order = ['auto', 'elevenlabs', 'piper'];
+    const idx = order.indexOf(current || 'auto');
+    return order[(idx + 1) % order.length];
+  };
+
   const changeModel = async (agentId: number, model: string) => {
     setSavingId(agentId);
     try {
@@ -169,6 +205,7 @@ export default function AdminAgentsPage() {
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Asistan Adı</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Dil</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Provider</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">TTS</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Model</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Durum</th>
                 <th className="text-center px-6 py-3 text-xs font-medium text-slate-500 uppercase">Test</th>
@@ -204,6 +241,20 @@ export default function AdminAgentsPage() {
                         saving={savingId === agent.id}
                         onChange={(pid) => changeProvider(agent.id, pid)}
                       />
+                    </td>
+                    <td className="px-6 py-3">
+                      <button
+                        onClick={() => changeTts(agent.id, cycleTts(agent.ttsProvider))}
+                        disabled={savingId === agent.id}
+                        className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        title="Tıklayarak değiştir: Otomatik → ElevenLabs → Piper → Otomatik"
+                      >
+                        {savingId === agent.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          ttsLabel(agent.ttsProvider)
+                        )}
+                      </button>
                     </td>
                     <td className="px-6 py-3">
                       <InlineModelSelect

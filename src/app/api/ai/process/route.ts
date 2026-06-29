@@ -187,6 +187,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       response: result.content,
       voiceId: agent.voice || '',
+      ttsProvider: agent.ttsProvider || 'auto',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

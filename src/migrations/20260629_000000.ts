@@ -33,8 +33,13 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
     WHERE "name" = 'Openai'
       AND "apikey" LIKE 'sk-proj%'
   `)
+
+  // PHASE 4: Add tts_provider column to agents table
+  await db.execute(sql`
+    ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "tts_provider" varchar DEFAULT 'auto';
+  `)
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
-  // No rollback for data fixes
+  await db.execute(sql`ALTER TABLE "agents" DROP COLUMN IF EXISTS "tts_provider";`)
 }

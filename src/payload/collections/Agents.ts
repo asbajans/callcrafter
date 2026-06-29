@@ -30,12 +30,25 @@ export const Agents: CollectionConfig = {
       name: 'voice',
       type: 'text',
       required: true,
-      label: 'Voice ID (Piper)',
+      label: 'Voice ID',
     },
     {
       name: 'voiceName',
       type: 'text',
       label: 'Voice Display Name',
+    },
+    {
+      name: 'ttsProvider',
+      type: 'select',
+      defaultValue: 'auto',
+      options: [
+        { label: 'Otomatik (ElevenLabs varsa onu kullan)', value: 'auto' },
+        { label: 'ElevenLabs', value: 'elevenlabs' },
+        { label: 'Piper (yerel)', value: 'piper' },
+      ],
+      admin: {
+        description: 'Hangi TTS motorunun kullanılacağı',
+      },
     },
     {
       name: 'language',

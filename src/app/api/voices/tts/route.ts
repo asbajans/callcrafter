@@ -11,7 +11,7 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
     return NextResponse.json({ error: 'No speakable text after sanitization' }, { status: 400 });
   }
 
-  const effectiveVoice = voiceId || '21m00Tcm4TlvDq8ikWAM'; // default: Rachel
+  const effectiveVoice = voiceId || '21m00Tcm4TlvDq8ikWAM';
   const modelId = 'eleven_flash_v2_5';
 
   const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
@@ -78,10 +78,14 @@ async function piperTTS(voiceId: string, text: string): Promise<NextResponse> {
 export async function GET(req: NextRequest) {
   const voiceId = req.nextUrl.searchParams.get('voice') || '';
   const text = req.nextUrl.searchParams.get('text') || '';
+  const provider = req.nextUrl.searchParams.get('provider') || 'auto';
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
 
   try {
-    if (elevenLabsKey) {
+    if (provider === 'elevenlabs' || (provider === 'auto' && elevenLabsKey)) {
+      if (!elevenLabsKey) {
+        return NextResponse.json({ error: 'ElevenLabs API key not configured' }, { status: 400 });
+      }
       return await elevenLabsTTS(voiceId, text, elevenLabsKey);
     }
     return await piperTTS(voiceId, text);

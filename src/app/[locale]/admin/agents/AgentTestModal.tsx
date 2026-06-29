@@ -13,6 +13,7 @@ interface Agent {
   name: string
   model?: string | null
   voice?: string | null
+  ttsProvider?: string | null
 }
 
 export default function AgentTestModal({
@@ -98,12 +99,13 @@ export default function AgentTestModal({
   const speakViaTTS = (text: string): Promise<void> => {
     return new Promise((resolve) => {
       const voiceId = agent.voice || 'tr_TR-dfki-medium'
+      const ttsProvider = agent.ttsProvider || 'auto'
       const cleanText = text
         .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
         .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
       if (!cleanText) { resolve(); return }
       setStatusText('Yanıt seslendiriliyor...')
-      fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(cleanText)}`)
+      fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(cleanText)}&provider=${encodeURIComponent(ttsProvider)}`)
         .then(res => {
           if (!res.ok) throw new Error('TTS failed')
           return res.blob()

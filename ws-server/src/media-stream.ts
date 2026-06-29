@@ -194,6 +194,7 @@ export async function processAudio(
     const data = await response.json();
     const aiResponse = data.response as string;
     const voiceId = data.voiceId as string | undefined;
+    const ttsProvider = data.ttsProvider as string | undefined;
 
     if (!aiResponse) {
       session.isAiSpeaking = false;
@@ -203,7 +204,7 @@ export async function processAudio(
     session.transcripts.push({ role: 'user', content: transcript });
     session.transcripts.push({ role: 'assistant', content: aiResponse });
 
-    await generateAndSendTTS(send, session, aiResponse, voiceId);
+    await generateAndSendTTS(send, session, aiResponse, voiceId, ttsProvider);
 
     return aiResponse;
   } catch (err) {
@@ -218,9 +219,11 @@ async function generateAndSendTTS(
   session: CallSession,
   text: string,
   voiceId?: string,
+  ttsProvider?: string,
 ): Promise<void> {
   try {
-    const mulawAudio = elevenLabsApiKey
+    const useCloud = ttsProvider === 'elevenlabs' || (ttsProvider !== 'piper' && elevenLabsApiKey);
+    const mulawAudio = useCloud
       ? await synthesizeCloud(text, voiceId)
       : await synthesizeLocal(text, voiceId);
 
