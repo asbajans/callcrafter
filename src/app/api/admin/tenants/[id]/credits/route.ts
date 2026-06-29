@@ -24,6 +24,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params
+  const tenantId = parseInt(id, 10)
+  if (isNaN(tenantId)) {
+    return NextResponse.json({ error: 'Invalid tenant ID' }, { status: 400 })
+  }
+
   const body = await req.json()
   const { amount, description, expiresAt } = body
 
@@ -32,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const service = new CreditService()
-  const success = await service.addCredits(id, amount, 'admin', {
+  const success = await service.addCredits(tenantId, amount, 'admin', {
     description: description || `Manual add by ${user.email}`,
     expiresAt: expiresAt || new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
   })
@@ -52,6 +57,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params
+  const tenantId = parseInt(id, 10)
+  if (isNaN(tenantId)) {
+    return NextResponse.json({ error: 'Invalid tenant ID' }, { status: 400 })
+  }
+
   const { searchParams } = new URL(req.url)
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
@@ -59,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const payload = await getPayload({ config })
   const transactions = await payload.find({
     collection: 'credit-transactions' as any,
-    where: { tenant: { equals: id } },
+    where: { tenant: { equals: tenantId } },
     sort: '-createdAt',
     page,
     limit,
