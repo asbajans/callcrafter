@@ -15,9 +15,7 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
   const isPiperVoice = /^[a-z]{2}_[A-Z]{2}/.test(voiceId);
   const effectiveVoice = (!voiceId || isPiperVoice) ? DEFAULT_ELEVENLABS_VOICE : voiceId;
 
-  const params = new URLSearchParams({ output_format: 'mp3_44100_128' });
-
-  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}/stream?${params}`, {
+  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
     method: 'POST',
     headers: {
       'xi-api-key': apiKey,
@@ -26,6 +24,7 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
     body: JSON.stringify({
       text: cleanText,
       model_id: 'eleven_multilingual_v2',
+      output_format: 'mp3_44100_128',
     }),
     signal: AbortSignal.timeout(20000),
   });

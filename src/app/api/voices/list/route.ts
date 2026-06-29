@@ -13,6 +13,7 @@ export async function GET() {
   }))
 
   let elevenLabsVoices: any[] = []
+  let hasElevenLabs = false
   const apiKey = process.env.ELEVENLABS_API_KEY
 
   if (apiKey) {
@@ -31,13 +32,14 @@ export async function GET() {
           previewUrl: v.preview_url || null,
           provider: 'elevenlabs' as const,
         }))
+        hasElevenLabs = elevenLabsVoices.length > 0
       }
     } catch {}
   }
 
   return NextResponse.json({
     voices: [...piperVoices, ...elevenLabsVoices],
-    defaultVoice: apiKey ? '21m00Tcm4TlvDq8ikWAM' : 'tr_TR-dfki-medium',
-    hasElevenLabs: !!apiKey,
+    defaultVoice: hasElevenLabs ? '21m00Tcm4TlvDq8ikWAM' : 'tr_TR-dfki-medium',
+    hasElevenLabs,
   })
 }
