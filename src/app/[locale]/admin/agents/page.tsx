@@ -5,10 +5,17 @@ import { useTranslations } from 'next-intl';
 import { Bot, ShieldAlert, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface ProviderModel {
+  name: string;
+  modelId: string;
+  creditCost: number;
+}
+
 interface Provider {
   id: number;
   name: string;
   providerType?: string;
+  models?: ProviderModel[] | null;
 }
 
 interface Agent {
@@ -21,23 +28,6 @@ interface Agent {
   status?: string | null;
   createdAt: string;
 }
-
-const COMMON_MODELS = [
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku-20241022',
-  'claude-3-opus-20240229',
-  'openai/gpt-4o',
-  'openai/gpt-4o-mini',
-  'anthropic/claude-3.5-sonnet',
-  'anthropic/claude-3-haiku',
-  'mistralai/mistral-7b-instruct',
-  'mistralai/mixtral-8x7b-instruct',
-  'google/gemini-pro',
-  'meta-llama/llama-3-70b-instruct',
-];
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -59,7 +49,7 @@ export default function AdminAgentsPage() {
       setError(null);
       const [agentsRes, provRes] = await Promise.all([
         fetch('/api/agents?limit=100&sort=-createdAt&depth=1'),
-        fetch('/api/ai-providers?limit=100&depth=0'),
+        fetch('/api/ai-providers?limit=100&depth=2'),
       ]);
       if (!agentsRes.ok) throw new Error('Failed to fetch agents');
       const agentsData = await agentsRes.json();
@@ -87,7 +77,7 @@ export default function AdminAgentsPage() {
       if (!res.ok) throw new Error('Failed to update provider');
       setAgents(prev => prev.map(a =>
         a.id === agentId
-          ? { ...a, provider: providers.find(p => p.id === providerId) || null }
+          ? { ...a, provider: providers.find(p => p.id === providerId) || null, model: '' }
           : a
       ));
       toast.success('Provider güncellendi');
@@ -113,6 +103,13 @@ export default function AdminAgentsPage() {
       return (agent.provider as Provider).id;
     }
     return agent.provider as number;
+  };
+
+  const getProviderModels = (agent: Agent): ProviderModel[] => {
+    const pid = getProviderId(agent);
+    if (!pid) return [];
+    const provider = providers.find(p => p.id === pid);
+    return provider?.models || [];
   };
 
   const changeModel = async (agentId: number, model: string) => {
@@ -201,7 +198,8 @@ export default function AdminAgentsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <InlineModelSelect
-                        currentModel={agent.model || 'gpt-4o'}
+                        currentModel={agent.model || ''}
+                        models={getProviderModels(agent)}
                         saving={savingId === agent.id}
                         onChange={(m) => changeModel(agent.id, m)}
                       />
@@ -287,10 +285,12 @@ function InlineProviderSelect({
 
 function InlineModelSelect({
   currentModel,
+  models,
   saving,
   onChange,
 }: {
   currentModel: string;
+  models: ProviderModel[];
   saving: boolean;
   onChange: (model: string) => void;
 }) {
@@ -307,8 +307,38 @@ function InlineModelSelect({
         onClick={() => { setValue(currentModel); setEditing(true); }}
         className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono transition-colors cursor-pointer"
       >
-        {currentModel}
+        {currentModel || '—'}
       </button>
+    );
+  }
+
+  if (models.length > 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="text-xs border border-slate-300 rounded px-1 py-0.5 bg-white font-mono"
+          autoFocus
+        >
+          <option value="">— Seçin —</option>
+          {models.map((m) => (
+            <option key={m.modelId} value={m.modelId}>{m.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { onChange(value); setEditing(false); }}
+          className="p-0.5 text-green-600 hover:text-green-800"
+        >
+          <Check className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          className="p-0.5 text-red-500 hover:text-red-700"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     );
   }
 
@@ -318,15 +348,10 @@ function InlineModelSelect({
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        list="model-suggestions"
         className="text-xs border border-slate-300 rounded px-1.5 py-0.5 bg-white font-mono w-full"
+        placeholder="model-id (örn: gpt-4o)"
         autoFocus
       />
-      <datalist id="model-suggestions">
-        {COMMON_MODELS.map((m) => (
-          <option key={m} value={m} />
-        ))}
-      </datalist>
       <button
         onClick={() => { onChange(value); setEditing(false); }}
         className="p-0.5 text-green-600 hover:text-green-800 shrink-0"
