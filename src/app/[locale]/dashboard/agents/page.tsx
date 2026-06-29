@@ -22,8 +22,11 @@ import {
   MessageCircle,
   Instagram,
   Globe,
+  Play,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import AgentTestModal from '../../admin/agents/AgentTestModal';
 
 type Agent = {
   id: string;
@@ -460,6 +463,8 @@ export default function AgentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voice?: string | null } | null>(null);
+  const [testDefaultTab, setTestDefaultTab] = useState<'text' | 'voice'>('text');
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -671,6 +676,20 @@ export default function AgentsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voiceId }); }}
+                          className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                          title="Yazılı Test"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voiceId }); }}
+                          className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          title="Sesli Test"
+                        >
+                          <Play className="w-4 h-4" />
+                        </button>
                         <button onClick={() => handleEdit(agent)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors" title="Düzenle">
                           <Pencil className="w-4 h-4" />
                         </button>
@@ -701,6 +720,14 @@ export default function AgentsPage() {
         voices={voices}
         loading={submitting}
       />
+
+      {testAgent && (
+        <AgentTestModal
+          agent={testAgent}
+          defaultTab={testDefaultTab}
+          onClose={() => { setTestAgent(null); setTestDefaultTab('text'); }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={deleteOpen}

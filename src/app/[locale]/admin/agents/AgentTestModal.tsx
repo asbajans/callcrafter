@@ -9,7 +9,7 @@ interface Message {
 }
 
 interface Agent {
-  id: number
+  id: number | string
   name: string
   model?: string | null
   voice?: string | null
