@@ -97,9 +97,13 @@ export default function AgentTestModal({
 
   const speakViaTTS = (text: string): Promise<void> => {
     return new Promise((resolve) => {
-      const voiceId = agent.voice || 'tr_TR-female-medium'
+      const voiceId = agent.voice || 'tr_TR-dfki-medium'
+      const cleanText = text
+        .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+        .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
+      if (!cleanText) { resolve(); return }
       setStatusText('Yanıt seslendiriliyor...')
-      fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`)
+      fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(cleanText)}`)
         .then(res => {
           if (!res.ok) throw new Error('TTS failed')
           return res.blob()
@@ -112,7 +116,12 @@ export default function AgentTestModal({
           audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve() }
           audio.play()
         })
-        .catch(() => resolve())
+        .catch((err) => {
+          console.error('TTS playback error:', err)
+          setStatusText('Seslendirme hatası')
+          setTimeout(() => { if (inCall) { setStatusText('Dinliyor...'); listeningRef.current = true } }, 1500)
+          resolve()
+        })
     })
   }
 
