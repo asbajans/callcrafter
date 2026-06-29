@@ -22,6 +22,23 @@ interface Agent {
   createdAt: string;
 }
 
+const COMMON_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229',
+  'openai/gpt-4o',
+  'openai/gpt-4o-mini',
+  'anthropic/claude-3.5-sonnet',
+  'anthropic/claude-3-haiku',
+  'mistralai/mistral-7b-instruct',
+  'mistralai/mixtral-8x7b-instruct',
+  'google/gemini-pro',
+  'meta-llama/llama-3-70b-instruct',
+];
+
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
   inactive: 'bg-gray-100 text-gray-600',
@@ -98,6 +115,27 @@ export default function AdminAgentsPage() {
     return agent.provider as number;
   };
 
+  const changeModel = async (agentId: number, model: string) => {
+    setSavingId(agentId);
+    try {
+      const res = await fetch(`/api/agents/${agentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ model: model || 'gpt-4o' }),
+      });
+      if (!res.ok) throw new Error('Failed to update model');
+      setAgents(prev => prev.map(a =>
+        a.id === agentId ? { ...a, model: model || 'gpt-4o' } : a
+      ));
+      toast.success('Model güncellendi');
+    } catch {
+      toast.error('Model güncellenirken hata oluştu');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -161,7 +199,13 @@ export default function AdminAgentsPage() {
                         onChange={(pid) => changeProvider(agent.id, pid)}
                       />
                     </td>
-                    <td className="px-6 py-3 text-slate-600 text-xs font-mono">{agent.model || '—'}</td>
+                    <td className="px-6 py-3">
+                      <InlineModelSelect
+                        currentModel={agent.model || 'gpt-4o'}
+                        saving={savingId === agent.id}
+                        onChange={(m) => changeModel(agent.id, m)}
+                      />
+                    </td>
                     <td className="px-6 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[agent.status || 'inactive'] || 'bg-gray-100 text-gray-600'}`}>
                         {agent.status || 'inactive'}
@@ -234,6 +278,64 @@ function InlineProviderSelect({
       <button
         onClick={() => setEditing(false)}
         className="p-0.5 text-red-500 hover:text-red-700"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function InlineModelSelect({
+  currentModel,
+  saving,
+  onChange,
+}: {
+  currentModel: string;
+  saving: boolean;
+  onChange: (model: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentModel);
+
+  if (saving) {
+    return <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setValue(currentModel); setEditing(true); }}
+        className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono transition-colors cursor-pointer"
+      >
+        {currentModel}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 min-w-[200px]">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        list="model-suggestions"
+        className="text-xs border border-slate-300 rounded px-1.5 py-0.5 bg-white font-mono w-full"
+        autoFocus
+      />
+      <datalist id="model-suggestions">
+        {COMMON_MODELS.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+      <button
+        onClick={() => { onChange(value); setEditing(false); }}
+        className="p-0.5 text-green-600 hover:text-green-800 shrink-0"
+      >
+        <Check className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="p-0.5 text-red-500 hover:text-red-700 shrink-0"
       >
         <X className="w-3.5 h-3.5" />
       </button>
