@@ -121,12 +121,14 @@ function AgentFormModal({
   const [elevenLabsVoices, setElevenLabsVoices] = useState<{ id: string; name: string; provider?: string }[]>([]);
   const [loadingElevenLabs, setLoadingElevenLabs] = useState(false);
   const [elevenLabsError, setElevenLabsError] = useState<string | null>(null);
+  const [elevenLabsFetched, setElevenLabsFetched] = useState(false);
 
   useEffect(() => {
     setForm(initialData ?? defaultFormData);
     setErrors({});
     setElevenLabsVoices([]);
     setElevenLabsError(null);
+    setElevenLabsFetched(false);
   }, [initialData, open]);
 
   const fetchElevenLabsVoices = useCallback(async () => {
@@ -134,22 +136,24 @@ function AgentFormModal({
     setElevenLabsError(null);
     try {
       const data = await api.getVoices();
-      setElevenLabsVoices(data.voices.filter((v) => v.provider === 'elevenlabs'));
-      if (data.voices.filter((v) => v.provider === 'elevenlabs').length === 0) {
+      const elVoices = data.voices.filter((v) => v.provider === 'elevenlabs');
+      setElevenLabsVoices(elVoices);
+      if (elVoices.length === 0) {
         setElevenLabsError('ElevenLabs ses bulunamadı. API anahtarınızı kontrol edin.');
       }
     } catch {
       setElevenLabsError('ElevenLabs sesleri alınamadı. API bağlantısını kontrol edin.');
     } finally {
       setLoadingElevenLabs(false);
+      setElevenLabsFetched(true);
     }
   }, []);
 
   useEffect(() => {
-    if (form.ttsProvider === 'elevenlabs' && elevenLabsVoices.length === 0 && !loadingElevenLabs) {
+    if (form.ttsProvider === 'elevenlabs' && !elevenLabsFetched && !loadingElevenLabs) {
       fetchElevenLabsVoices();
     }
-  }, [form.ttsProvider, fetchElevenLabsVoices, elevenLabsVoices.length, loadingElevenLabs]);
+  }, [form.ttsProvider, elevenLabsFetched, loadingElevenLabs, fetchElevenLabsVoices]);
 
   const update = <K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
     setForm((prev) => {
