@@ -107,7 +107,9 @@ async function synthesizeCloud(text: string, voiceId?: string): Promise<Buffer> 
   const isPiperVoice = voiceId ? /^[a-z]{2}_[A-Z]{2}/.test(voiceId) : false;
   const effectiveVoice = (!voiceId || isPiperVoice) ? DEFAULT_ELEVENLABS_VOICE : voiceId;
 
-  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
+  const params = new URLSearchParams({ output_format: 'ulaw_8000' });
+
+  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}/stream?${params}`, {
     method: 'POST',
     headers: {
       'xi-api-key': elevenLabsApiKey,
@@ -115,10 +117,9 @@ async function synthesizeCloud(text: string, voiceId?: string): Promise<Buffer> 
     },
     body: JSON.stringify({
       text: cleanText,
-      model_id: 'eleven_flash_v2_5',
-      output_format: 'ulaw_8000',
+      model_id: 'eleven_multilingual_v2',
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!res.ok) {

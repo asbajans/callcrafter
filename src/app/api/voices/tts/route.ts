@@ -14,9 +14,10 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
   const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM';
   const isPiperVoice = /^[a-z]{2}_[A-Z]{2}/.test(voiceId);
   const effectiveVoice = (!voiceId || isPiperVoice) ? DEFAULT_ELEVENLABS_VOICE : voiceId;
-  const modelId = 'eleven_flash_v2_5';
 
-  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
+  const params = new URLSearchParams({ output_format: 'mp3_44100_128' });
+
+  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}/stream?${params}`, {
     method: 'POST',
     headers: {
       'xi-api-key': apiKey,
@@ -24,10 +25,9 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
     },
     body: JSON.stringify({
       text: cleanText,
-      model_id: modelId,
-      output_format: 'mp3_44100_128',
+      model_id: 'eleven_multilingual_v2',
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!res.ok) {
