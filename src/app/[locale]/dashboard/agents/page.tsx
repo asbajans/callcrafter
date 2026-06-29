@@ -33,13 +33,15 @@ type Agent = {
   name: string;
   description: string | null;
   systemPrompt: string | null;
-  voiceId: string | null;
+  voice: string | null;
   voiceName: string | null;
   language: string;
   temperature: number;
   channels: string[];
   greetingMessage: string | null;
   status: string;
+  model?: string | null;
+  provider?: number | { id: number } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -57,26 +59,40 @@ const agentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional().default(''),
   systemPrompt: z.string().min(1, 'System prompt is required'),
-  voiceId: z.string().min(1, 'Voice is required'),
+  voice: z.string().min(1, 'Voice is required'),
   language: z.enum(LANGUAGES),
   temperature: z.number().min(0).max(2),
   channels: z.array(z.enum(['voice', 'whatsapp', 'instagram', 'web'])).min(1, 'Select at least one channel'),
   greetingMessage: z.string().max(500).optional().default(''),
   status: z.enum(['Active', 'Inactive', 'Testing']),
+  provider: z.number().optional(),
+  model: z.string().optional(),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
+
+interface AiProvider {
+  id: number;
+  name: string;
+  displayName?: string;
+  providerType: string;
+  models: { name: string; modelId: string; creditCost?: number }[];
+  defaultModel?: string;
+  isActive: boolean;
+}
 
 const defaultFormData: AgentFormData = {
   name: '',
   description: '',
   systemPrompt: '',
-  voiceId: '',
+  voice: '',
   language: 'EN',
   temperature: 0.7,
   channels: ['voice'],
   greetingMessage: '',
   status: 'Active',
+  provider: undefined,
+  model: undefined,
 };
 
 function AgentFormModal({
@@ -85,6 +101,7 @@ function AgentFormModal({
   onSubmit,
   initialData,
   voices,
+  providers,
   loading,
 }: {
   open: boolean;
@@ -92,6 +109,7 @@ function AgentFormModal({
   onSubmit: (data: AgentFormData) => Promise<void>;
   initialData?: AgentFormData | null;
   voices: Voice[];
+  providers: AiProvider[];
   loading: boolean;
 }) {
   const t = useTranslations();
@@ -104,10 +122,17 @@ function AgentFormModal({
   }, [initialData, open]);
 
   const update = <K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === 'provider') {
+        next.model = undefined;
+      }
+      return next;
+    });
     setErrors((prev) => {
       const next = { ...prev };
       delete next[key];
+      delete next.model;
       return next;
     });
   };
@@ -126,6 +151,9 @@ function AgentFormModal({
     }
     await onSubmit(result.data);
   };
+
+  const selectedProvider = providers.find(p => p.id === form.provider);
+  const availableModels = selectedProvider?.models || [];
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
     const current = form.channels;
@@ -234,11 +262,11 @@ function AgentFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">{t('agent.voice')}</label>
-                <Select.Root value={form.voiceId} onValueChange={(v) => update('voiceId', v)}>
+                <Select.Root value={form.voice} onValueChange={(v) => update('voice', v)}>
                   <Select.Trigger
                     className={cn(
                       'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                      errors.voiceId ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
+                      errors.voice ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
                     )}
                   >
                     <Select.Value placeholder="Ses seç" />
@@ -267,7 +295,7 @@ function AgentFormModal({
                     </Select.Content>
                   </Select.Portal>
                 </Select.Root>
-                {errors.voiceId && <p className="text-xs text-red-400">{errors.voiceId}</p>}
+                    {errors.voice && <p className="text-xs text-red-400">{errors.voice}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -323,6 +351,77 @@ function AgentFormModal({
                   <span>2 (Yaratıcı)</span>
                 </div>
                 {errors.temperature && <p className="text-xs text-red-400">{errors.temperature}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">AI Sağlayıcı</label>
+                <Select.Root
+                  value={form.provider ? String(form.provider) : ''}
+                  onValueChange={(v) => update('provider', v ? Number(v) : undefined)}
+                >
+                  <Select.Trigger
+                    className={cn(
+                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                      'border-white/[0.1] bg-white/[0.06]'
+                    )}
+                  >
+                    <Select.Value placeholder="Sağlayıcı seç" />
+                    <Select.Icon>
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                      <Select.Viewport>
+                        {providers.filter(p => p.isActive).map((p) => (
+                          <Select.Item
+                            key={p.id}
+                            value={String(p.id)}
+                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                          >
+                            <Select.ItemText>{p.displayName || p.name}</Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Model</label>
+                <Select.Root
+                  value={form.model || ''}
+                  onValueChange={(v) => update('model', v || undefined)}
+                >
+                  <Select.Trigger
+                    className={cn(
+                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                      'border-white/[0.1] bg-white/[0.06]'
+                    )}
+                  >
+                    <Select.Value placeholder={form.provider ? 'Model seç' : 'Önce sağlayıcı seçin'} />
+                    <Select.Icon>
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                      <Select.Viewport>
+                        {availableModels.map((m: any) => (
+                          <Select.Item
+                            key={m.modelId || m}
+                            value={m.modelId || m}
+                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                          >
+                            <Select.ItemText>{m.name || m.modelId || m}</Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
               </div>
             </div>
 
@@ -452,6 +551,7 @@ export default function AgentsPage() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [voices] = useState<Voice[]>(DEFAULT_VOICES);
+  const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -478,9 +578,19 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const fetchProviders = useCallback(async () => {
+    try {
+      const data = await api.getAiProviders();
+      setProviders(Array.isArray(data) ? data : data.docs ?? []);
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
-  }, [fetchAgents]);
+    fetchProviders();
+  }, [fetchAgents, fetchProviders]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -489,16 +599,19 @@ export default function AgentsPage() {
   };
 
   const handleEdit = (agent: Agent) => {
+    const providerId = typeof agent.provider === 'object' ? (agent.provider as any).id : agent.provider
     setEditingAgent({
       name: agent.name,
       description: agent.description ?? '',
       systemPrompt: agent.systemPrompt ?? '',
-      voiceId: agent.voiceId ?? '',
+      voice: agent.voice ?? '',
       language: agent.language as AgentFormData['language'],
       temperature: agent.temperature,
       channels: agent.channels as AgentFormData['channels'],
       greetingMessage: agent.greetingMessage ?? '',
       status: agent.status as AgentFormData['status'],
+      provider: providerId || undefined,
+      model: agent.model || undefined,
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -512,18 +625,20 @@ export default function AgentsPage() {
   const handleFormSubmit = async (data: AgentFormData) => {
     setSubmitting(true);
     try {
-      const voiceName = voices.find(v => v.id === data.voiceId)?.name || data.voiceId;
+      const voiceName = voices.find(v => v.id === data.voice)?.name || data.voice;
       const payload = {
         name: data.name,
         description: data.description,
         systemPrompt: data.systemPrompt,
-        voice: data.voiceId,
+        voice: data.voice,
         voiceName,
         language: data.language.toLowerCase(),
         temperature: data.temperature,
         channels: data.channels,
         greetingMessage: data.greetingMessage,
         status: data.status.toLowerCase(),
+        ...(data.provider ? { provider: data.provider } : {}),
+        ...(data.model ? { model: data.model } : {}),
       };
       if (editingId) {
         await api.updateAgent(editingId, payload);
@@ -653,7 +768,7 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
-                      {agent.voiceName || agent.voiceId || '—'}
+                      {agent.voiceName || agent.voice || '—'}
                     </td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
                       <span className="text-xs font-medium text-slate-400 bg-white/[0.06] px-2 py-1 rounded-lg">{agent.language}</span>
@@ -677,14 +792,14 @@ export default function AgentsPage() {
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voiceId }); }}
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
                           title="Yazılı Test"
                         >
                           <MessageSquare className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voiceId }); }}
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                           title="Sesli Test"
                         >
@@ -718,6 +833,7 @@ export default function AgentsPage() {
         onSubmit={handleFormSubmit}
         initialData={editingAgent}
         voices={voices}
+        providers={providers}
         loading={submitting}
       />
 

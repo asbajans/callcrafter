@@ -46,7 +46,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No agent configured for this number' }, { status: 404 })
     }
 
-    const voice = agent.voice as any
     const tenantId = typeof agent.tenant === 'object' ? agent.tenant.id : agent.tenant
 
     const rateLimiter = new RateLimiter()
@@ -187,8 +186,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       response: result.content,
-      voiceId: voice?.providerVoiceId || '',
-      voiceSettings: voice?.settings || { stability: 0.5, similarityBoost: 0.75 },
+      voiceId: agent.voice || '',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

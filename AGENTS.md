@@ -14,17 +14,22 @@
 │  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
 │  │  app:3000 │  │ws:8080   │  │postgres:5432│  │
 │  │ 3500→3000 │  │3501→8080 │  │ (internal)  │  │
-│  └──────────┘  └──────────┘  └────────────┘  │
-│  ┌──────────┐                                │
-│  │redis:6379│                                 │
-│  │(internal)│                                 │
-│  └──────────┘                                │
+│  └──────────┘  └─────┬─────┘  └────────────┘  │
+│  ┌──────────┐  ┌─────▼──────┐  ┌────────────┐ │
+│  │redis:6379│  │piper:5000  │  │whisper:9000 │ │
+│  │(internal)│  │  3503→5000 │  │  3502→9000  │ │
+│  └──────────┘  └────────────┘  └────────────┘ │
+│  ┌───────────────────────────────────────────┐│
+│  │ wa-bridge (evolution-api)  :8080          ││
+│  └───────────────────────────────────────────┘│
 └───────────────────────────────────────────────┘
 ```
 
 - **No Traefik** — Cloudflare Tunnel handles SSL termination + domain routing
-- **Single host port per service** — only 3500 (app) and 3501 (ws-server) exposed
+- **Host ports**: 3500 (app), 3501 (ws-server), 3502 (whisper), 3503 (piper)
 - **ws-server** serves both HTTP (Twilio webhooks) and WebSocket (media streams) on port 8080
+- **piper-tts**: Self-hosted TTS with `tr_TR-dfki-medium` (Turkish female) and `en_US-lessac-medium` (English) voices
+- **whisper-server**: Self-hosted STT with `faster_whisper` engine
 
 ### Stack
 - **Frontend**: Next.js 15 (App Router, `output: 'standalone'`) + Tailwind 4 + next-intl (TR/EN)
@@ -32,103 +37,111 @@
 - **Database**: PostgreSQL 16 (main data)
 - **Cache**: Redis 7
 - **Media Server**: Standalone ws-server (Express + `ws` library, HTTP+WS on single port)
-- **AI**: OpenAI (GPT-4o) / Anthropic (Claude 3.5) — swappable per agent
-- **TTS**: ElevenLabs (`ulaw_8000` format, Twilio-compatible)
-- **STT**: OpenAI Whisper
+- **AI**: OpenAI (GPT) / Anthropic (Claude) / OpenRouter / Ollama — swappable per agent via AiProviders collection
+- **TTS**: Piper (self-hosted, offline) — voice ID stored as text in agent's `voice` field
+- **STT**: Whisper (self-hosted via faster-whisper)
 - **Channels**: Twilio (voice), Zadarma (voice), WhatsApp, Instagram, Web Chat
 - **Billing**: Stripe
 - **Deployment**: Docker + Portainer stack (no Traefik) + GitHub Actions
 
 ## Services (Portainer Stack)
 
-| Service   | Image                          | Host Port | Container Port |
-|-----------|--------------------------------|-----------|----------------|
-| postgres  | postgres:16-alpine             | —         | 5432           |
-| redis     | redis:7-alpine                 | —         | 6379           |
-| app       | asbajans/callcrafter           | 3500      | 3000           |
-| ws-server | asbajans/callcrafter-ws        | 3501      | 8080           |
+| Service       | Image                                     | Host Port | Container Port |
+|--------------|-------------------------------------------|-----------|----------------|
+| postgres      | postgres:16-alpine                         | —         | 5432           |
+| redis         | redis:7-alpine                             | —         | 6379           |
+| app           | asbajans/callcrafter                       | 3500      | 3000           |
+| ws-server     | asbajans/callcrafter-ws                    | 3501      | 8080           |
+| whisper-server| onerahmet/openai-whisper-asr-webservice    | 3502      | 9000           |
+| piper-tts     | asbajans/callcrafter-piper                 | 3503      | 5000           |
+| wa-bridge     | evoapicloud/evolution-api:v2.3.7           | —         | 8080           |
 
 Internal ports (5432, 6379, internal Docker network) never conflict with host services.
 
 ## Key Data Flow
 
-### Incoming Voice Call
+### Incoming Voice Call (self-hosted STT/TTS)
 ```
 Twilio → POST /twilio/voice (ws-server :8080)
        → TwiML with <Stream url="wss://.../?call={CallSid}">
        → WebSocket connection (same :8080, WS attached to HTTP server)
        → Audio chunks (mulaw 8kHz, base64)
        → Buffer + silence detection
-       → Whisper STT (transcript)
+       → local Whisper STT (transcript)
        → POST /api/ai/process (app :3000, via INTERNAL_API_KEY)
-         → Look up phone number → Agent → Voice → Training docs
+         → Look up phone number → Agent → resolveProviderConfig(agent)
+           → Reads ai-providers collection with overrideAccess: true
+           → Auto-detects provider type from API key prefix (sk-or-v1, sk-ant-)
          → AgentOrchestrator (GPT-4o / Claude)
          → Log conversation + messages
-         → Return { response, voiceId, voiceSettings }
-       → ElevenLabs TTS (output_format: ulaw_8000)
+         → Return { response, voiceId }
+       → local Piper TTS (using agent's voice ID)
        → Stream audio chunks back to Twilio via WebSocket
 ```
 
-## Recent Fixes & Changes
+### Admin Test (browser-based voice call loop)
+```
+Browser → GET /api/voices/tts?voice=...&text=... → Piper TTS → play audio
+Browser → MediaRecorder + VAD (RMS energy threshold)
+       → {speech detected} → wait 1.5s silence → POST /api/stt/transcribe → Whisper
+       → POST /api/ai/test → resolveProviderConfig → AI response
+       → GET /api/voices/tts → Piper TTS → play → listen loop
+```
 
-### Docker Build
-- `npm install --legacy-peer-deps` (Peer dependency conflict Payload ↔ Next.js)
-- `output: 'standalone'` in next.config.ts
-- `eslint.ignoreDuringBuilds: true` (ESLint 10 incompatible with next lint options)
-- Removed `COPY --from=builder /app/public ./public` (standalone output includes it)
+## Recent Fixes & Changes (29 June 2026)
 
-### CI/CD
-- ESLint pinned to v8.57.1 (`eslint-config-next` requires v8)
-- Lint step removed from test.yml (`next build` already validates)
-- Deploy workflow uses Docker Buildx → Docker Hub → Portainer API
-- Deploy workflow triggers on push to master; uses Portainer webhook for redeploy
-- Test workflow: `npm install --legacy-peer-deps` → `npm run typecheck` → `npm run build`
+### CRITICAL: API Key Security Fix
+- **`AiProviders.apiKey`** field now has `access.read: () => false` to prevent REST API exposure of API keys
+- Server-side reads use `overrideAccess: true` in `resolveProvider.ts` (already in place)
+- `admin: { hidden: true }` already hides key from Payload admin UI
 
-### TypeScript
-- `newConversation.id as number` casts in 3 route files (Payload's `create` returns `string | number`)
+### CRITICAL: Dashboard Agents `voiceId` → `voice` Field Name Fix
+- **`src/app/[locale]/dashboard/agents/page.tsx`**: All 9 references to `voiceId` renamed to `voice` to match the Payload collection field name
+- The submit handler was already correct (`voice: data.voiceId`) but reading agents always returned `undefined` for `agent.voiceId`
+- Type definition, Zod schema, form defaults, select value, error display, edit prefill, voice table cell, and test button clicks all updated
+
+### CRITICAL: `ai/process/route.ts` — `voice.providerVoiceId` Bug
+- Line 190 was `voice?.providerVoiceId || ''` where `voice = agent.voice` (a text string)
+- Since `agent.voice` is a Piper voice ID string (not an object), `.providerVoiceId` was always `undefined`
+- Fixed to just use `agent.voice` directly; removed unused `voiceSettings` response field
+
+### Instagram Webhook — Now Uses `resolveProviderConfig`
+- **`src/app/api/webhooks/instagram/route.ts`**: Removed hardcoded `modelMap` and env-var-based API key lookup
+- Now imports and uses `resolveProviderConfig(agent)` to dynamically resolve provider from DB
+- Agent's `provider` relationship is respected for Instagram channel too
+
+### WhatsApp Shared — Dead Code Cleanup
+- **`src/app/api/webhooks/whatsapp/shared.ts`**: Removed unused `modelMap` constant (was defined but never used — `resolveProviderConfig` was already being called)
+
+### ws-server — Voice ID Now Passed to TTS
+- **`ws-server/src/media-stream.ts`**: `processAudio` now extracts `data.voiceId` from AI process response and passes it to `generateAndSendTTS(send, session, aiResponse, voiceId)`
+- `synthesizeLocal(text, voiceId)` already supported optional `voiceId` but it was never passed
+- Real phone calls now use the agent's configured Piper voice instead of Piper's default
 
 ### Infrastructure
-- Traefik removed (Cloudflare Tunnel handles SSL + routing)
-- Host ports: 3500 → app:3000, 3501 → ws-server:8080
-- ws-server WS_WS_PORT=8080 (attached to HTTP server, not separate)
-- Container names: `ws-server` (consistent naming)
-- Postgres password: `postcall1212*`
+- **`portainer-stack.yml`** and **`docker-compose.yml`**: `PIPER_TTS_URL` and `WHISPER_SERVER_URL` env vars added to app container for explicit service discovery
+- Piper TTS on port 3503:5000 (health checks pass ✅)
+- Whisper STT on port 3502:9000 (ASR endpoint responds ✅)
 
-### JWT & Auth Fixes (21 June 2026)
-- **CRITICAL**: Payload hashes `PAYLOAD_SECRET` with SHA-256 (first 32 hex chars) before JWT signing (`node_modules/payload/dist/index.js:321`). Both `src/middleware.ts` and `src/lib/auth.ts` must use the same hashed secret for JWT verification — fixed in both files.
-- `src/lib/auth.ts`: Added `crypto.createHash('sha256').update(rawSecret).digest('hex').slice(0, 32)` for JWT verification.
-- `src/middleware.ts`: Same hash applied to `JWT_SECRET` constant.
-- `src/app/api/auth/me/route.ts`: New endpoint — returns current user from JWT cookie (used by dashboard layout to display real user info).
-- `src/app/api/auth/logout/route.ts`: New endpoint — clears `payload-token` cookie.
-- Cookie `secure` flag is now dynamic based on `x-forwarded-proto` header (was hardcoded to `true`, blocking HTTP access).
-- Login route returns actual error message in debug mode for troubleshooting.
+### Database Migration `20260629_000000`
+- Converts `ai_providers.models` from string array to object array format
+  - Old: `["gpt-5-nano"]` → New: `[{"name":"GPT-5 Nano","modelId":"gpt-5-nano","creditCost":1}]`
+- Fixes `opentouur` provider's `provider_type` from `openai` to `openrouter` (its API key starts with `sk-or-v1`)
 
-### Migration Fixes (21 June 2026)
-- Migration `20260620_205416` made fully idempotent:
-  - `CREATE TYPE` wrapped in `DO $$ IF NOT EXISTS ...`
-  - `CREATE TABLE` uses `CREATE TABLE IF NOT EXISTS`
-  - `ADD COLUMN` uses `ADD COLUMN IF NOT EXISTS`
-  - `ADD CONSTRAINT` uses `ADD CONSTRAINT IF NOT EXISTS`
-  - `CREATE INDEX` uses `CREATE INDEX IF NOT EXISTS`
-- Migration failure is non-fatal; server starts regardless.
+### Self-Hosted Voice Infrastructure
+- **Piper TTS**: Dockerfile in `piper-server/` — builds with `tr_TR-dfki-medium` and `en_US-lessac-medium` models
+- **Whisper STT**: Uses `onerahmet/openai-whisper-asr-webservice:latest` with `faster_whisper` engine
+- **Test endpoints**:
+  - `GET /api/voices/tts?voice=...&text=...` — proxied to Piper
+  - `POST /api/stt/transcribe` — authenticated, credit-deducted Whisper transcription
+  - `POST /api/ai/test` — authenticated, credit-deducted AI response (supports OpenAI + Anthropic)
 
-### Dashboard Fixes (21 June 2026)
-- **Overview link**: Changed from `/dashboard/overview` (404) to `/dashboard`.
-- **Logout button**: Added to sidebar user footer — sends POST `/api/auth/logout`, clears cookie, redirects to login.
-- **User profile**: Sidebar avatar now links to Settings page. Header avatar is also clickable.
-- **Dynamic user info**: Sidebar fetches `/api/auth/me` to display real user name/email/initial.
-- **Language switcher**: Rewritten to use `window.location.pathname` with regex replace (was stripping `/dashboard/` from path).
-- **WhatsApp nav label**: Changed from `labelKey: 'WhatsApp'` to `labelKey: 'whatsapp'` to match translation key convention.
-- **Integrations page**: Added at `/dashboard/integrations` with Instagram, Facebook, CRM, Calendar connection cards.
-
-### Landing Page Fix (21 June 2026)
-- Login/register links in `src/app/[locale]/page.tsx` changed from string `"/${locale}/auth/..."` to template literal `` `/${locale}/auth/...` `` (was rendering literal `${locale}` instead of the variable).
-
-## Deployment Status (11 June 2026)
+## Deployment Status (29 June 2026)
 - Build: ✅ `npm run build` passes (0 errors)
-- Test workflow: ✅ Passes (typecheck + build)
-- Deploy workflow: ✅ Passes (Docker → Docker Hub → Portainer)
-- Site: ✅ Live at `http://192.168.0.243:3500` (landing page in Turkish)
+- All services: ✅ Running on server
+- Site: ✅ Live at `http://192.168.0.243:3500`
+- Piper TTS: ✅ Port 3503 responds
+- Whisper STT: ✅ Port 3502 responds
 - DNS: ⏳ `callcrafter.com.tr` + `ws.callcrafter.com.tr` propagation pending
 
 ## Portainer Setup
@@ -147,7 +160,6 @@ REDIS_URL=redis://redis:6379
 INTERNAL_API_KEY=<shared secret>
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
-ELEVENLABS_API_KEY=...
 ZADARMA_API_KEY=...
 ZADARMA_SECRET=...
 TWILIO_ACCOUNT_SID=...
@@ -156,6 +168,8 @@ WA_BRIDGE_API_KEY=<shared with evolution-api>
 WA_BRIDGE_WEBHOOK_SECRET=<for QR bridge webhooks>
 WHATSAPP_CONTEXT_RESET_MINUTES=30
 ```
+
+(ELEVENLABS_API_KEY no longer needed — TTS is fully self-hosted via Piper)
 
 ### GitHub Secrets
 | Secret                     | Description                          |
@@ -182,7 +196,10 @@ CallCrafter/
 │   │   │   ├── admin/        # /admin
 │   │   │   └── api/          # /api/* (Payload REST)
 │   │   ├── api/              # Custom routes
-│   │   │   ├── ai/process/   # POST /api/ai/process
+│   │   │   ├── ai/process/   # POST /api/ai/process (production AI)
+│   │   │   ├── ai/test/      # POST /api/ai/test (test AI with auth+credits)
+│   │   │   ├── stt/          # POST /api/stt/transcribe
+│   │   │   ├── voices/       # GET /tts, POST /upload
 │   │   │   ├── auth/         # login, register, logout, me
 │   │   │   ├── calls/        # call initiation
 │   │   │   ├── twilio/       # outbound TwiML
@@ -193,26 +210,30 @@ CallCrafter/
 │   │   │   ├── auth/         # Login, Register
 │   │   │   ├── dashboard/    # Overview, Agents, Phone, Trunk, WhatsApp, Conversations, Training, Billing, Settings, Integrations
 │   │   │   └── admin/        # Super Admin: Users, Payments, Providers, System
-│   │   └── lib/              # Shared utilities (api.ts, auth.ts, i18n.ts, utils.ts)
+│   │   └── lib/              # Shared utilities (api.ts, auth.ts, i18n.ts, utils.ts, resolveProvider.ts, voices.ts)
 │   ├── ai/
 │   │   ├── orchestrator/     # AgentOrchestrator (OpenAI/Anthropic, tool calling)
 │   │   ├── stt/              # STTModule (Whisper)
-│   │   ├── tts/              # ElevenLabsTTS
+│   │   ├── tts/              # ElevenLabsTTS (legacy)
 │   │   ├── rag/              # RAGPipeline (LangChain)
 │   │   └── tools/            # ToolRegistry
-│   ├── media/adapters/       # TwilioAdapter, ZadarmaAdapter, AsteriskAdapter (stub)
+│   ├── billing/              # creditMiddleware, StripeService
 │   ├── channels/             # WhatsAppAdapter, InstagramAdapter, WebChatAdapter, UnifiedRouter
-│   ├── billing/              # StripeService
-│   └── payload/collections/  # 15 collections
+│   ├── migrations/           # Payload DB migrations
+│   └── payload/collections/  # 15+ collections
 ├── ws-server/src/
 │   ├── index.ts              # Express + WS server (both on :8080)
 │   ├── twilio-webhook.ts     # TwiML → Media Streams
 │   ├── websocket.ts          # Session mgmt, silence detection, turn-taking
-│   ├── media-stream.ts       # STT→AI→TTS pipeline
+│   ├── media-stream.ts       # STT (local Whisper) → AI → TTS (local Piper)
 │   ├── zadarma-handler.ts    # Zadarma WS client + pipeline
-│   └── utils.ts              # Audio helpers
+│   └── utils.ts              # Audio helpers (mulawToWav)
+├── piper-server/
+│   ├── Dockerfile            # Piper + ffmpeg + Turkish/English voices
+│   ├── package.json
+│   └── server.js             # HTTP API for TTS
 ├── config/
-│   └── portainer-stack.yml   # Production stack (no Traefik)
+│   └── portainer-stack.yml   # Production stack (7 services)
 ├── Dockerfile                # Multi-stage (deps → builder → runner)
 ├── docker-compose.yml        # Local dev (matches portainer-stack)
 └── .github/workflows/
@@ -220,17 +241,18 @@ CallCrafter/
     └── deploy.yml            # Docker build → push → Portainer API
 ```
 
-## Payload Collections (15)
+## Payload Collections (18)
 
 | Collection            | Slug                    | Purpose                        |
 |-----------------------|-------------------------|--------------------------------|
 | Users                 | users                   | Auth + roles                   |
 | Tenants               | tenants                 | Multi-tenant isolation         |
 | Agents                | agents                  | AI agent config                |
-| VoiceConfigs          | voice-configs           | Voice DB (ElevenLabs IDs)      |
+| VoiceConfigs          | voice-configs           | Voice DB (legacy ElevenLabs)   |
 | PhoneNumbers          | phone-numbers           | Phone → agent mapping          |
 | ProviderConfigs       | provider-configs        | Twilio/Zadarma config          |
 | SipTrunks             | sip-trunks              | Bring-your-own SIP trunk       |
+| AiProviders           | ai-providers            | AI provider API keys + models  |
 | Conversations         | conversations           | Call records                   |
 | Messages              | messages                | Transcripts                    |
 | TrainingDocs          | training-docs           | RAG training documents         |
@@ -259,7 +281,8 @@ CallCrafter/
 - HTTP + WebSocket on same port (8080), WS attached to HTTP server
 - Communicates with app via HTTP with `INTERNAL_API_KEY`
 - Twilio audio: mulaw 8kHz, 20ms chunks (160 bytes)
-- ElevenLabs TTS: `output_format: 'ulaw_8000'`
+- Piper TTS output: WAV with pcm_mulaw codec (8kHz, 1 channel)
+- Whisper STT: POST `/asr` with `audio_file` multipart form
 
 ## Testing
 ```bash
@@ -271,3 +294,4 @@ cd ws-server && npx tsc --noEmit  # ws-server TS check
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
 - 4 Pricing Plans, 5 Default Voices
+- 2 AI Providers: OpenAI (gpt-5-nano), OpenRouter (openrouter/free)

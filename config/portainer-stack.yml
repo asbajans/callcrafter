@@ -79,6 +79,8 @@ services:
       WA_BRIDGE_API_KEY: ${WA_BRIDGE_API_KEY}
       WA_BRIDGE_WEBHOOK_SECRET: ${WA_BRIDGE_WEBHOOK_SECRET}
       WHATSAPP_CONTEXT_RESET_MINUTES: ${WHATSAPP_CONTEXT_RESET_MINUTES:-30}
+      PIPER_TTS_URL: http://piper-tts:5000
+      WHISPER_SERVER_URL: http://whisper-server:9000
     networks:
       - callcrafter_network
 

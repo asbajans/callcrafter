@@ -156,6 +156,7 @@ export async function processAudio(
 
     const data = await response.json();
     const aiResponse = data.response as string;
+    const voiceId = data.voiceId as string | undefined;
 
     if (!aiResponse) {
       session.isAiSpeaking = false;
@@ -165,7 +166,7 @@ export async function processAudio(
     session.transcripts.push({ role: 'user', content: transcript });
     session.transcripts.push({ role: 'assistant', content: aiResponse });
 
-    await generateAndSendTTS(send, session, aiResponse);
+    await generateAndSendTTS(send, session, aiResponse, voiceId);
 
     return aiResponse;
   } catch (err) {
@@ -179,9 +180,10 @@ async function generateAndSendTTS(
   send: (payload: string) => void,
   session: CallSession,
   text: string,
+  voiceId?: string,
 ): Promise<void> {
   try {
-    const mulawAudio = await synthesizeLocal(text);
+    const mulawAudio = await synthesizeLocal(text, voiceId);
 
     if (mulawAudio.length === 0) {
       console.error('TTS returned empty audio');

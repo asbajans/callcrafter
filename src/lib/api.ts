@@ -201,6 +201,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // AI Providers
+  getAiProviders: () =>
+    request<{ docs: any[] }>('/api/ai-providers'),
+
   // WhatsApp
   getWhatsAppAccounts: () =>
     request<{ docs: any[] }>('/api/whatsapp/accounts'),

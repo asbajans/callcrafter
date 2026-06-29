@@ -4,15 +4,7 @@ import config from '../../../../../payload.config'
 import { InstagramAdapter } from '@/channels/instagram/InstagramAdapter'
 import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
 import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
-
-const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
-  'gpt-4': { provider: 'openai', model: 'gpt-4' },
-  'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
-  'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-  'claude-3-opus': { provider: 'anthropic', model: 'claude-3-opus-latest' },
-  'claude-3-sonnet': { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
-  'claude-3-haiku': { provider: 'anthropic', model: 'claude-3-5-haiku-latest' },
-}
+import { resolveProviderConfig } from '@/lib/resolveProvider'
 
 function getInstagramAdapter(): InstagramAdapter {
   return new InstagramAdapter({
@@ -69,8 +61,6 @@ export async function POST(req: NextRequest) {
       }
 
       const agent = agents.docs[0]
-      const voice = agent.voice as any
-
       let trainingContext = ''
       if (agent.trainingDocs && agent.trainingDocs.length > 0) {
         const trainingDocIds = agent.trainingDocs.map((d: any) =>
@@ -83,16 +73,16 @@ export async function POST(req: NextRequest) {
         trainingContext = trainingDocs.docs.map((d: any) => d.content).join('\n\n').slice(0, 10000)
       }
 
-      const modelConfig = modelMap[agent.model as string] || { provider: 'openai', model: 'gpt-4o' }
-      const apiKeyForProvider =
-        modelConfig.provider === 'openai'
-          ? process.env.OPENAI_API_KEY!
-          : process.env.ANTHROPIC_API_KEY!
+      const providerConfig = await resolveProviderConfig(agent)
+      if (!providerConfig.apiKey) {
+        await adapter.sendText(msg.from, 'AI Provider API key not configured.')
+        continue
+      }
 
       const orchestrator = new AgentOrchestrator({
-        provider: modelConfig.provider,
-        apiKey: apiKeyForProvider,
-        model: modelConfig.model,
+        provider: providerConfig.providerType as 'openai' | 'anthropic',
+        apiKey: providerConfig.apiKey,
+        model: providerConfig.model,
       })
 
       const existingConversations = await payload.find({
@@ -167,8 +157,8 @@ export async function POST(req: NextRequest) {
         conversation: String(conversationId),
         channel: 'instagram',
         service: 'llm',
-        provider: modelConfig.provider,
-        model: modelConfig.model,
+        provider: providerConfig.providerType,
+        model: providerConfig.model,
         inputTokens: Math.ceil(msg.text.length / 4),
         outputTokens: Math.ceil(result.content.length / 4),
       })

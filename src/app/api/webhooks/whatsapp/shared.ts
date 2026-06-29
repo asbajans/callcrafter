@@ -6,15 +6,6 @@ import { AgentOrchestrator, type AgentContext } from '@/ai/orchestrator/AgentOrc
 import { resolveProviderConfig } from '@/lib/resolveProvider'
 import postgres from 'postgres'
 
-const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
-  'gpt-4': { provider: 'openai', model: 'gpt-4' },
-  'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
-  'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-  'claude-3-opus': { provider: 'anthropic', model: 'claude-3-opus-latest' },
-  'claude-3-sonnet': { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
-  'claude-3-haiku': { provider: 'anthropic', model: 'claude-3-5-haiku-latest' },
-}
-
 const CONTEXT_RESET_MINUTES = parseInt(process.env.WHATSAPP_CONTEXT_RESET_MINUTES || '30', 10)
 
 export async function resolveAccount(accountId?: number | string) {
