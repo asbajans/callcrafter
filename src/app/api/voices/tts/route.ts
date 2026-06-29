@@ -11,7 +11,9 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
     return NextResponse.json({ error: 'No speakable text after sanitization' }, { status: 400 });
   }
 
-  const effectiveVoice = voiceId || '21m00Tcm4TlvDq8ikWAM';
+  const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM';
+  const isPiperVoice = /^[a-z]{2}_[A-Z]{2}/.test(voiceId);
+  const effectiveVoice = (!voiceId || isPiperVoice) ? DEFAULT_ELEVENLABS_VOICE : voiceId;
   const modelId = 'eleven_flash_v2_5';
 
   const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {

@@ -103,7 +103,9 @@ async function synthesizeCloud(text: string, voiceId?: string): Promise<Buffer> 
 
   if (!cleanText) throw new Error('No speakable text after sanitization');
 
-  const effectiveVoice = voiceId || '21m00Tcm4TlvDq8ikWAM';
+  const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM';
+  const isPiperVoice = voiceId ? /^[a-z]{2}_[A-Z]{2}/.test(voiceId) : false;
+  const effectiveVoice = (!voiceId || isPiperVoice) ? DEFAULT_ELEVENLABS_VOICE : voiceId;
 
   const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
     method: 'POST',

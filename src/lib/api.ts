@@ -66,7 +66,7 @@ export const api = {
     request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
 
   // Voice Configs
-  getVoices: () =>
+  getVoiceConfigs: () =>
     request<{ docs: any[] }>('/api/voice-configs'),
 
   // Phone Numbers
@@ -200,6 +200,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Voices
+  getVoices: () =>
+    request<{ voices: { id: string; name: string; language: string | null; gender: string | null; provider: string; previewUrl?: string | null }[]; defaultVoice: string; hasElevenLabs: boolean }>('/api/voices/list'),
 
   // AI Providers
   getAiProviders: () =>

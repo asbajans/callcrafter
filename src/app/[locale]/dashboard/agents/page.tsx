@@ -7,7 +7,7 @@ import * as Select from '@radix-ui/react-select';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { api } from '@/lib/api';
-import { DEFAULT_VOICES, type Voice } from '@/lib/voices';
+import type { Voice } from '@/lib/voices';
 import {
   Plus,
   Pencil,
@@ -106,14 +106,16 @@ function AgentFormModal({
   voices,
   providers,
   loading,
+  elevenLabsVoices,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: AgentFormData) => Promise<void>;
   initialData?: AgentFormData | null;
-  voices: Voice[];
+  voices: (Voice & { provider?: string })[];
   providers: AiProvider[];
   loading: boolean;
+  elevenLabsVoices: { id: string; name: string; provider?: string }[];
 }) {
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
@@ -157,6 +159,9 @@ function AgentFormModal({
 
   const selectedProvider = providers.find(p => p.id === form.provider);
   const availableModels = selectedProvider?.models || [];
+
+  const useElevenLabs = form.ttsProvider === 'elevenlabs' || (form.ttsProvider !== 'piper' && elevenLabsVoices.length > 0);
+  const availableVoices = useElevenLabs ? elevenLabsVoices : voices;
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
     const current = form.channels;
@@ -280,18 +285,18 @@ function AgentFormModal({
                   <Select.Portal>
                     <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
                       <Select.Viewport>
-                        {voices.map((v) => (
+                        {availableVoices.map((v) => (
                           <Select.Item
                             key={v.id}
                             value={v.id}
                             className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
                           >
                             <Select.ItemText>
-                              {v.name} {v.language ? `(${v.language})` : ''}
+                              {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : `(${(v as any).language || ''})`}
                             </Select.ItemText>
                           </Select.Item>
                         ))}
-                        {voices.length === 0 && (
+                        {availableVoices.length === 0 && (
                           <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
                         )}
                       </Select.Viewport>
@@ -588,7 +593,8 @@ export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [voices] = useState<Voice[]>(DEFAULT_VOICES);
+  const [voices, setVoices] = useState<(Voice & { provider?: string })[]>([]);
+  const [elevenLabsVoices, setElevenLabsVoices] = useState<{ id: string; name: string; provider?: string }[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -625,10 +631,21 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const fetchVoices = useCallback(async () => {
+    try {
+      const data = await api.getVoices();
+      setVoices(data.voices.filter((v) => v.provider !== 'elevenlabs') as any);
+      setElevenLabsVoices(data.voices.filter((v) => v.provider === 'elevenlabs'));
+    } catch {
+      // non-critical, use fallback
+    }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
     fetchProviders();
-  }, [fetchAgents, fetchProviders]);
+    fetchVoices();
+  }, [fetchAgents, fetchProviders, fetchVoices]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -664,7 +681,7 @@ export default function AgentsPage() {
   const handleFormSubmit = async (data: AgentFormData) => {
     setSubmitting(true);
     try {
-      const voiceName = voices.find(v => v.id === data.voice)?.name || data.voice;
+      const voiceName = voices.find(v => v.id === data.voice)?.name || elevenLabsVoices.find(v => v.id === data.voice)?.name || data.voice;
       const payload = {
         name: data.name,
         description: data.description,
@@ -880,6 +897,7 @@ export default function AgentsPage() {
         voices={voices}
         providers={providers}
         loading={submitting}
+        elevenLabsVoices={elevenLabsVoices}
       />
 
       {testAgent && (
