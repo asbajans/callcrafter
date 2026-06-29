@@ -4,6 +4,7 @@ import config from '../../../../../payload.config'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
+import { resolveProviderConfig } from '@/lib/resolveProvider'
 
 function getTenantId(agent: any): number | null {
   if (!agent.tenant) return null
@@ -26,11 +27,9 @@ export async function POST(req: NextRequest) {
 
     const payload = await getPayload({ config })
 
-    let userId: string
     try {
       const { user } = await payload.auth({ headers: new Headers({ Cookie: `payload-token=${token}` }) })
       if (!user) throw new Error('Invalid token')
-      userId = String(user.id)
     } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
     const agents = await payload.find({
       collection: 'agents',
       where: { id: { equals: agentId } },
-      depth: 2,
+      depth: 1,
     })
     if (agents.docs.length === 0) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -55,44 +54,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: creditCheck.error }, { status: 402 })
     }
 
-    const model = agent.model || 'gpt-4o'
+    const providerConfig = await resolveProviderConfig(agent)
+    if (!providerConfig.apiKey) {
+      return NextResponse.json({
+        error: `AI Provider "${providerConfig.providerType}" için API anahtarı tanımlanmamış. Admin panelden AI Provider kaydını düzenleyin.`,
+      }, { status: 500 })
+    }
+
     const systemPrompt = agent.systemPrompt || 'You are a helpful assistant.'
     const temperature = agent.temperature ?? 0.7
     const maxTokens = agent.maxTokens ?? 2048
-
-    const provider = (agent as any).provider
-    let providerType = 'openai'
-    let apiKey = ''
-    let baseUrl: string | undefined
-
-    if (provider && typeof provider === 'object') {
-      const p = provider as any
-      providerType = p.providerType || 'openai'
-      const storedKey = (p as any).apiKey
-      if (storedKey && typeof storedKey === 'string' && storedKey.startsWith('sk-')) {
-        apiKey = storedKey
-      }
-    }
-
-    if (!apiKey) {
-      if (providerType === 'anthropic') {
-        apiKey = process.env.ANTHROPIC_API_KEY || ''
-      } else if (providerType === 'openrouter') {
-        baseUrl = 'https://openrouter.ai/api/v1'
-        apiKey = process.env.OPENROUTER_API_KEY || ''
-      } else {
-        apiKey = process.env.OPENAI_API_KEY || ''
-      }
-    }
-
-    if (!apiKey) {
-      const keyName = providerType === 'anthropic' ? 'ANTHROPIC_API_KEY'
-        : providerType === 'openrouter' ? 'OPENROUTER_API_KEY'
-        : 'OPENAI_API_KEY'
-      return NextResponse.json({
-        error: `${keyName} environment variable is not configured. Add it in Portainer to use AI test.`,
-      }, { status: 500 })
-    }
 
     let trainingContext = ''
     if (agent.trainingDocs && agent.trainingDocs.length > 0) {
@@ -117,14 +88,14 @@ export async function POST(req: NextRequest) {
 
     let result: string
 
-    if (providerType === 'anthropic') {
-      const anthropic = new Anthropic({ apiKey })
+    if (providerConfig.providerType === 'anthropic') {
+      const anthropic = new Anthropic({ apiKey: providerConfig.apiKey })
       const messages: Anthropic.MessageParam[] = [
         ...conversationHistory,
         { role: 'user', content: message },
       ]
       const response = await anthropic.messages.create({
-        model,
+        model: providerConfig.model,
         max_tokens: maxTokens,
         temperature,
         system: fullSystemPrompt,
@@ -132,14 +103,14 @@ export async function POST(req: NextRequest) {
       })
       result = response.content.map((c) => (c.type === 'text' ? c.text : '')).join('')
     } else {
-      const openai = new OpenAI({ apiKey, baseURL: baseUrl })
+      const openai = new OpenAI({ apiKey: providerConfig.apiKey, baseURL: providerConfig.baseUrl })
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: 'system', content: fullSystemPrompt },
         ...conversationHistory,
         { role: 'user', content: message },
       ]
       const response = await openai.chat.completions.create({
-        model,
+        model: providerConfig.model,
         messages,
         temperature,
         max_tokens: maxTokens,
@@ -150,8 +121,8 @@ export async function POST(req: NextRequest) {
     await deductAICost(tenantId, {
       channel: 'voice',
       service: 'llm',
-      provider: providerType,
-      model,
+      provider: providerConfig.providerType,
+      model: providerConfig.model,
       inputTokens: Math.ceil(message.length / 4),
       outputTokens: Math.ceil(result.length / 4),
     })

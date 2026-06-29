@@ -3,6 +3,7 @@ import config from '@payload-config'
 import { WhatsAppAdapter, type WhatsAppConfig } from '@/channels/whatsapp/WhatsAppAdapter'
 import { WhatsAppQRBridgeAdapter, type WhatsAppQRBridgeConfig } from '@/channels/whatsapp/WhatsAppQRBridgeAdapter'
 import { AgentOrchestrator, type AgentContext } from '@/ai/orchestrator/AgentOrchestrator'
+import { resolveProviderConfig } from '@/lib/resolveProvider'
 import postgres from 'postgres'
 
 const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
@@ -349,13 +350,12 @@ export async function processWithAI(agent: any, userText: string, conversationHi
     trainingContext = trainingDocs.docs.map((d: any) => d.content).join('\n\n').slice(0, 10000)
   }
 
-  const modelConfig = modelMap[agent.model as string] || { provider: 'openai', model: 'gpt-4o' }
-  const apiKeyForProvider = modelConfig.provider === 'openai' ? process.env.OPENAI_API_KEY! : process.env.ANTHROPIC_API_KEY!
+  const providerConfig = await resolveProviderConfig(agent)
 
   const orchestrator = new AgentOrchestrator({
-    provider: modelConfig.provider,
-    apiKey: apiKeyForProvider,
-    model: modelConfig.model,
+    provider: providerConfig.providerType as 'openai' | 'anthropic',
+    apiKey: providerConfig.apiKey,
+    model: providerConfig.model,
   })
 
   const result = await orchestrator.process({
@@ -402,13 +402,12 @@ export async function analyzeSupportIntent(userText: string, agent: any): Promis
     return { needsTicket: false, reason: 'auto-ticket disabled' }
   }
 
-  const modelConfig = modelMap[agent.model as string] || { provider: 'openai', model: 'gpt-4o-mini' }
-  const apiKey = modelConfig.provider === 'openai' ? process.env.OPENAI_API_KEY! : process.env.ANTHROPIC_API_KEY!
+  const providerConfig = await resolveProviderConfig(agent)
 
   const orchestrator = new AgentOrchestrator({
-    provider: modelConfig.provider,
-    apiKey,
-    model: modelConfig.model,
+    provider: providerConfig.providerType as 'openai' | 'anthropic',
+    apiKey: providerConfig.apiKey,
+    model: providerConfig.model,
   })
 
   const result = await orchestrator.process({

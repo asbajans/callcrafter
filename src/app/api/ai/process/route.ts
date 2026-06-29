@@ -5,15 +5,7 @@ import { AgentOrchestrator } from '@/ai/orchestrator/AgentOrchestrator'
 import { RateLimiter } from '@/lib/rate-limiter'
 import { aiLogger } from '@/lib/logger'
 import { checkCreditBalance, deductAICost } from '@/billing/creditMiddleware'
-
-const modelMap: Record<string, { provider: 'openai' | 'anthropic'; model: string }> = {
-  'gpt-4': { provider: 'openai', model: 'gpt-4' },
-  'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
-  'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-  'claude-3-opus': { provider: 'anthropic', model: 'claude-3-opus-latest' },
-  'claude-3-sonnet': { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
-  'claude-3-haiku': { provider: 'anthropic', model: 'claude-3-5-haiku-latest' },
-}
+import { resolveProviderConfig } from '@/lib/resolveProvider'
 
 export async function POST(req: NextRequest) {
   try {
@@ -102,16 +94,16 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    const modelConfig = modelMap[agent.model] || { provider: 'openai', model: 'gpt-4o' }
-    const apiKeyForProvider =
-      modelConfig.provider === 'openai'
-        ? process.env.OPENAI_API_KEY!
-        : process.env.ANTHROPIC_API_KEY!
+    const providerConfig = await resolveProviderConfig(agent)
+    if (!providerConfig.apiKey) {
+      aiLogger.error('No API key configured for AI process', new Error(`agentId=${agent.id} model=${agent.model}`))
+      return NextResponse.json({ error: 'AI Provider API key not configured' }, { status: 500 })
+    }
 
     const orchestrator = new AgentOrchestrator({
-      provider: modelConfig.provider,
-      apiKey: apiKeyForProvider,
-      model: modelConfig.model,
+      provider: providerConfig.providerType as 'openai' | 'anthropic',
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
     })
 
     aiLogger.info('AI orchestrator processing', { callSid, agentId: agent.id, model: agent.model })
@@ -187,8 +179,8 @@ export async function POST(req: NextRequest) {
       conversation: String(conversationId),
       channel: 'voice',
       service: 'llm',
-      provider: modelConfig.provider,
-      model: modelConfig.model,
+      provider: providerConfig.providerType,
+      model: providerConfig.model,
       inputTokens: Math.ceil(transcript.length / 4),
       outputTokens: Math.ceil(result.content.length / 4),
     })
