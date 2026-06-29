@@ -12,14 +12,7 @@ interface Agent {
   id: number
   name: string
   model?: string | null
-  systemPrompt?: string | null
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: any
-    webkitSpeechRecognition: any
-  }
+  voice?: string | null
 }
 
 export default function AgentTestModal({
@@ -35,11 +28,12 @@ export default function AgentTestModal({
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [listening, setListening] = useState(false)
-  const [speaking, setSpeaking] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [playing, setPlaying] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<any>(null)
-  const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' })
@@ -47,8 +41,13 @@ export default function AgentTestModal({
 
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) recognitionRef.current.abort()
-      if (speechSynthRef.current) window.speechSynthesis.cancel()
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
     }
   }, [])
 
@@ -73,7 +72,7 @@ export default function AgentTestModal({
       if (!res.ok) throw new Error(data.error || 'Request failed')
       const assistantMsg: Message = { role: 'assistant', content: data.response }
       setMessages(prev => [...prev, assistantMsg])
-      if (tab === 'voice') speakText(data.response)
+      if (tab === 'voice') speakViaTTS(data.response)
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }])
     } finally {
@@ -81,38 +80,73 @@ export default function AgentTestModal({
     }
   }, [agent.id, messages, sending, tab])
 
-  const speakText = (text: string) => {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'tr-TR'
-    utterance.rate = 1
-    utterance.onstart = () => setSpeaking(true)
-    utterance.onend = () => setSpeaking(false)
-    utterance.onerror = () => setSpeaking(false)
-    speechSynthRef.current = utterance
-    window.speechSynthesis.speak(utterance)
+  const speakViaTTS = async (text: string) => {
+    const voiceId = agent.voice || 'tr_TR-female-medium'
+    try {
+      setPlaying(true)
+      const res = await fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`)
+      if (!res.ok) throw new Error('TTS failed')
+      const audioBlob = await res.blob()
+      const url = URL.createObjectURL(audioBlob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => { setPlaying(false); URL.revokeObjectURL(url) }
+      audio.onerror = () => { setPlaying(false); URL.revokeObjectURL(url) }
+      audio.play()
+    } catch {
+      setPlaying(false)
+    }
   }
 
-  const startListening = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Voice recognition not supported in this browser. Use Chrome.' }])
-      return
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      audioChunksRef.current = []
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        setRecording(false)
+        await transcribeAudio(audioBlob)
+      }
+      mediaRecorderRef.current = mediaRecorder
+      mediaRecorder.start()
+      setRecording(true)
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Mikrofon erişimi reddedildi. Tarayıcı ayarlarından izin verin.' }])
     }
-    const recognition = new SpeechRecognition()
-    recognition.lang = 'tr-TR'
-    recognition.interimResults = false
-    recognition.continuous = false
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript
-      setListening(false)
-      if (transcript.trim()) sendMessage(transcript)
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
     }
-    recognition.onerror = () => setListening(false)
-    recognition.onend = () => setListening(false)
-    recognitionRef.current = recognition
-    recognition.start()
-    setListening(true)
+  }
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    setSending(true)
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.webm')
+      const res = await fetch('/api/stt/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Transcription failed')
+      if (data.text?.trim()) {
+        await sendMessage(data.text)
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Ses algılanamadı, lütfen tekrar deneyin.' }])
+      }
+    } catch (err: any) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `STT hatası: ${err.message}` }])
+    } finally {
+      setSending(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -215,17 +249,17 @@ export default function AgentTestModal({
         ) : (
           <div className="border-t border-slate-200 p-4 flex items-center justify-center gap-4">
             <button
-              onClick={startListening}
-              disabled={listening || sending}
-              className={`p-4 rounded-full transition-all ${listening ? 'bg-red-500 text-white scale-110 animate-pulse' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}
-              title={listening ? 'Dinliyor...' : 'Konuşmak için tıkla'}
+              onClick={recording ? stopRecording : startRecording}
+              disabled={sending}
+              className={`p-4 rounded-full transition-all ${recording ? 'bg-red-500 text-white scale-110 animate-pulse' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}
+              title={recording ? 'Kaydı durdur' : 'Konuşmak için basılı tut'}
             >
-              {listening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              {recording ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
             </button>
-            {speaking && (
+            {playing && (
               <div className="flex items-center gap-2 text-sm text-indigo-500">
                 <Volume2 className="w-4 h-4 animate-pulse" />
-                Yanıt okunuyor...
+                Yanıt çalınıyor...
               </div>
             )}
           </div>

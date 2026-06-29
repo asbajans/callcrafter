@@ -25,6 +25,7 @@ interface Agent {
   description?: string | null;
   language?: string | null;
   model?: string | null;
+  voice?: string | null;
   provider?: Provider | number | null;
   status?: string | null;
   createdAt: string;
