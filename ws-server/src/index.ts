@@ -16,6 +16,7 @@ initMediaStream({
   piperServerUrl: process.env.PIPER_TTS_URL || 'http://localhost:3503',
   appApiUrl: process.env.APP_API_URL || 'http://localhost:3000',
   internalApiKey: process.env.INTERNAL_API_KEY || '',
+  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
 });
 
 const app = express();

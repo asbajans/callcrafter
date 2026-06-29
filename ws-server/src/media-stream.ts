@@ -19,17 +19,22 @@ let whisperUrl = process.env.WHISPER_SERVER_URL || 'http://localhost:3502';
 let piperUrl = process.env.PIPER_TTS_URL || 'http://localhost:3503';
 let appApiUrl = process.env.APP_API_URL || 'http://localhost:3000';
 let internalApiKey = process.env.INTERNAL_API_KEY || '';
+let elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || '';
+
+const ELEVENLABS_API = 'https://api.elevenlabs.io/v1';
 
 export function initMediaStream(config: {
   whisperServerUrl?: string;
   piperServerUrl?: string;
   appApiUrl?: string;
   internalApiKey?: string;
+  elevenLabsApiKey?: string;
 }) {
   if (config.whisperServerUrl) whisperUrl = config.whisperServerUrl;
   if (config.piperServerUrl) piperUrl = config.piperServerUrl;
   if (config.appApiUrl) appApiUrl = config.appApiUrl;
   if (config.internalApiKey) internalApiKey = config.internalApiKey;
+  if (config.elevenLabsApiKey) elevenLabsApiKey = config.elevenLabsApiKey;
 }
 
 export function createSession(callSid: string, streamSid: string, from: string, to: string): CallSession {
@@ -89,6 +94,38 @@ async function transcribeLocal(wavBuffer: Buffer): Promise<string> {
 
   const data = await res.json();
   return (data.text || data.segments?.[0]?.text || '').trim();
+}
+
+async function synthesizeCloud(text: string, voiceId?: string): Promise<Buffer> {
+  const cleanText = text
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!cleanText) throw new Error('No speakable text after sanitization');
+
+  const effectiveVoice = voiceId || '21m00Tcm4TlvDq8ikWAM';
+
+  const res = await fetch(`${ELEVENLABS_API}/text-to-speech/${effectiveVoice}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': elevenLabsApiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text: cleanText,
+      model_id: 'eleven_flash_v2_5',
+      output_format: 'ulaw_8000',
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`ElevenLabs error (${res.status}): ${err}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> {
@@ -183,7 +220,9 @@ async function generateAndSendTTS(
   voiceId?: string,
 ): Promise<void> {
   try {
-    const mulawAudio = await synthesizeLocal(text, voiceId);
+    const mulawAudio = elevenLabsApiKey
+      ? await synthesizeCloud(text, voiceId)
+      : await synthesizeLocal(text, voiceId);
 
     if (mulawAudio.length === 0) {
       console.error('TTS returned empty audio');
