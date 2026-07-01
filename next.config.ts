@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  serverExternalPackages: ['payload', 'ioredis', 'undici'],
+  serverExternalPackages: ['payload', 'ioredis', 'undici', 'ws'],
   images: {
     remotePatterns: [
       {
