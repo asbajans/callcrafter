@@ -1,4 +1,8 @@
-import WebSocket from 'ws';
+// webpack'i atla — eval ile require çağırısı webpack tarafından analiz edilemez
+// eslint-disable-next-line no-eval
+const _require = eval('require') as NodeRequire;
+const WebSocket = _require('ws');
+
 import { randomBytes, createHash } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
 
@@ -164,7 +168,7 @@ export class EdgeTTS {
         }
       });
 
-      ws.on('error', (err) => {
+      ws.on('error', (err: any) => {
         clearTimeout(timeout);
         reject(new Error(`Edge TTS error: ${err.message}`));
       });
