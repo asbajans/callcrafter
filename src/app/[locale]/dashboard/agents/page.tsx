@@ -389,13 +389,12 @@ function AgentFormModal({
                           <div
                             key={v.id}
                             className={cn(
-                              'flex items-center justify-between px-3.5 py-2.5 text-sm cursor-pointer transition-colors',
+                              'flex items-center justify-between px-3.5 py-2.5 text-sm cursor-pointer transition-colors group',
                               form.voice === v.id
                                 ? 'bg-indigo-600/30 text-indigo-200'
                                 : 'text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200'
                             )}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
+                            onClick={() => {
                               update('voice', v.id);
                               setVoiceDropdownOpen(false);
                             }}
@@ -405,11 +404,14 @@ function AgentFormModal({
                             </span>
                             <button
                               type="button"
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                              }}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 previewVoice(v.id, (v as any).provider || form.ttsProvider || 'edge-tts');
                               }}
-                              className="ml-2 p-1 rounded-md hover:bg-white/10 transition-colors shrink-0"
+                              className="ml-2 p-1 rounded-md hover:bg-white/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
                               title="Sesi dinle"
                             >
                               {previewingVoice === v.id ? (
