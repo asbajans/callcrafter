@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { DEFAULT_VOICES } from '@/lib/voices'
+import { DEFAULT_VOICES, EDGE_TTS_VOICES } from '@/lib/voices'
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1'
 
@@ -10,6 +10,14 @@ export async function GET() {
     language: v.language,
     gender: v.gender || null,
     provider: 'piper' as const,
+  }))
+
+  const edgeTTSVoices = EDGE_TTS_VOICES.map(v => ({
+    id: v.id,
+    name: v.name,
+    language: v.language,
+    gender: v.gender || null,
+    provider: 'edge-tts' as const,
   }))
 
   let elevenLabsVoices: any[] = []
@@ -38,8 +46,9 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    voices: [...piperVoices, ...elevenLabsVoices],
-    defaultVoice: hasElevenLabs ? '21m00Tcm4TlvDq8ikWAM' : 'tr_TR-dfki-medium',
+    voices: [...edgeTTSVoices, ...piperVoices, ...elevenLabsVoices],
+    defaultVoice: 'tr-TR-EmelNeural',
     hasElevenLabs,
+    hasEdgeTTS: true,
   })
 }

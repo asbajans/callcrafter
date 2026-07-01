@@ -68,7 +68,7 @@ const agentSchema = z.object({
   status: z.enum(['Active', 'Inactive', 'Testing']),
   provider: z.number().optional(),
   model: z.string().optional(),
-  ttsProvider: z.enum(['auto', 'elevenlabs', 'piper']).optional().default('auto'),
+  ttsProvider: z.enum(['auto', 'edge-tts', 'elevenlabs', 'piper']).optional().default('auto'),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
@@ -193,7 +193,10 @@ function AgentFormModal({
   const availableModels = selectedProvider?.models || [];
 
   const useElevenLabs = form.ttsProvider === 'elevenlabs';
-  const availableVoices = useElevenLabs ? elevenLabsVoices : voices;
+  const useEdgeTTS = form.ttsProvider === 'edge-tts' || form.ttsProvider === 'auto';
+  const availableVoices = useElevenLabs
+    ? elevenLabsVoices
+    : voices.filter((v) => useEdgeTTS ? (v.provider === 'edge-tts') : (v.provider === 'piper'));
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
     const current = form.channels;
@@ -490,7 +493,7 @@ function AgentFormModal({
               <label className="text-sm font-medium text-slate-300">Ses Motoru</label>
               <Select.Root
                 value={form.ttsProvider || 'auto'}
-                onValueChange={(v) => update('ttsProvider', v as 'auto' | 'elevenlabs' | 'piper')}
+                onValueChange={(v) => update('ttsProvider', v as 'auto' | 'edge-tts' | 'elevenlabs' | 'piper')}
               >
                 <Select.Trigger
                   className={cn(
@@ -507,13 +510,16 @@ function AgentFormModal({
                   <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
                     <Select.Viewport>
                       <Select.Item value="auto" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>Otomatik (önce ElevenLabs)</Select.ItemText>
+                        <Select.ItemText>Otomatik (önce Edge TTS)</Select.ItemText>
                       </Select.Item>
-                      <Select.Item value="elevenlabs" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>ElevenLabs</Select.ItemText>
+                      <Select.Item value="edge-tts" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                        <Select.ItemText>Edge TTS (Microsoft, ucretsiz)</Select.ItemText>
                       </Select.Item>
                       <Select.Item value="piper" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>Piper (yerel)</Select.ItemText>
+                        <Select.ItemText>Piper (yerel, offline)</Select.ItemText>
+                      </Select.Item>
+                      <Select.Item value="elevenlabs" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                        <Select.ItemText>ElevenLabs (ucretli)</Select.ItemText>
                       </Select.Item>
                     </Select.Viewport>
                   </Select.Content>
@@ -606,7 +612,7 @@ function DeleteConfirmDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-slate-900 rounded-2xl shadow-2xl border border-white/[0.1] p-6 animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-slate-900 rounded-2xl shadow-2xl border border-white/[0.1] p-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center gap-4 mb-5">
             <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0">
               <Trash2 className="w-6 h-6 text-red-400" />
@@ -708,7 +714,7 @@ export default function AgentsPage() {
       status: agent.status as AgentFormData['status'],
       provider: providerId || undefined,
       model: agent.model || undefined,
-      ttsProvider: (agent.ttsProvider as 'auto' | 'elevenlabs' | 'piper') || 'auto',
+      ttsProvider: (agent.ttsProvider as 'auto' | 'edge-tts' | 'elevenlabs' | 'piper') || 'auto',
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -869,7 +875,7 @@ export default function AgentsPage() {
                       <span>{agent.voiceName || agent.voice || '—'}</span>
                       {agent.ttsProvider && agent.ttsProvider !== 'auto' && (
                         <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-medium">
-                          {agent.ttsProvider === 'elevenlabs' ? 'EL' : 'Piper'}
+                          {agent.ttsProvider === 'elevenlabs' ? 'EL' : agent.ttsProvider === 'edge-tts' ? 'Edge' : 'Piper'}
                         </span>
                       )}
                     </td>

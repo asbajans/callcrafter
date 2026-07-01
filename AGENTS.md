@@ -38,7 +38,7 @@
 - **Cache**: Redis 7
 - **Media Server**: Standalone ws-server (Express + `ws` library, HTTP+WS on single port)
 - **AI**: OpenAI (GPT) / Anthropic (Claude) / OpenRouter / Ollama — swappable per agent via AiProviders collection
-- **TTS**: Piper (self-hosted, offline) — voice ID stored as text in agent's `voice` field
+- **TTS**: Edge TTS (Microsoft, free, no API key) / Piper (self-hosted, offline) / ElevenLabs (cloud, paid) — per-agent selectable via `ttsProvider` field
 - **STT**: Whisper (self-hosted via faster-whisper)
 - **Channels**: Twilio (voice), Zadarma (voice), WhatsApp, Instagram, Web Chat
 - **Billing**: Stripe
@@ -74,9 +74,9 @@ Twilio → POST /twilio/voice (ws-server :8080)
            → Auto-detects provider type from API key prefix (sk-or-v1, sk-ant-)
          → AgentOrchestrator (GPT-4o / Claude)
          → Log conversation + messages
-         → Return { response, voiceId }
-       → local Piper TTS (using agent's voice ID)
-       → Stream audio chunks back to Twilio via WebSocket
+         → Return { response, voiceId, ttsProvider }
+       → Edge TTS (Microsoft, free) or Piper (local) or ElevenLabs (cloud)
+         → MP3 → ffmpeg → mulaw 8kHz → Twilio audio chunks
 ```
 
 ### Admin Test (browser-based voice call loop)
@@ -88,60 +88,68 @@ Browser → MediaRecorder + VAD (RMS energy threshold)
        → GET /api/voices/tts → Piper TTS → play → listen loop
 ```
 
-## Recent Fixes & Changes (29 June 2026)
+## Recent Fixes & Changes (1 July 2026)
 
-### CRITICAL: API Key Security Fix
+### Edge TTS (Microsoft) Integration — Free Unlimited TTS
+- **`src/ai/tts/EdgeTTS.ts`**: New Edge TTS wrapper class using `msedge-tts` npm package. Microsoft Edge Read Aloud API — no API key required, free unlimited usage.
+- **`src/lib/voices.ts`**: Added `EDGE_TTS_VOICES` array with 14 pre-configured voices (TR/EN/DE/FR/ES). Each voice has `provider: 'edge-tts'` field.
+- **`src/payload/collections/Agents.ts`**: `ttsProvider` field updated: `auto` / `edge-tts` / `piper` / `elevenlabs`. Default is `auto` (edge-tts -> piper -> elevenlabs fallback).
+- **`/api/voices/tts`**: Added `edge-tts` provider path. Returns MP3 audio for browser playback. Voice ID format: `tr-TR-EmelNeural`.
+- **`/api/voices/list`**: Returns Edge TTS + Piper + ElevenLabs voices. Edge TTS voices listed first. `hasEdgeTTS: true` flag always returned.
+- **`ws-server/src/media-stream.ts`**: `synthesizeEdge()` function converts Edge TTS MP3 to mulaw 8kHz via ffmpeg for Twilio compatibility. Auto fallback: edge-tts -> piper.
+- **Dashboard form**: TTS provider dropdown now shows 4 options. Edge TTS voices appear in dynamic dropdown when selected.
+- **Dockerfile** (app): Added `ffmpeg` to alpine runner for potential audio conversion needs.
+- **ws-server/Dockerfile**: Added `ffmpeg` to alpine runner for Edge TTS MP3->mulaw conversion.
+- **Dependencies**: `msedge-tts` added to both app and ws-server `package.json`.
+
+### ElevenLabs Cloud TTS Integration (29 June 2026)
 - **`AiProviders.apiKey`** field now has `access.read: () => false` to prevent REST API exposure of API keys
 - Server-side reads use `overrideAccess: true` in `resolveProvider.ts` (already in place)
 - `admin: { hidden: true }` already hides key from Payload admin UI
 
 ### CRITICAL: Dashboard Agents `voiceId` → `voice` Field Name Fix
 - **`src/app/[locale]/dashboard/agents/page.tsx`**: All 9 references to `voiceId` renamed to `voice` to match the Payload collection field name
-- The submit handler was already correct (`voice: data.voiceId`) but reading agents always returned `undefined` for `agent.voiceId`
 - Type definition, Zod schema, form defaults, select value, error display, edit prefill, voice table cell, and test button clicks all updated
 
 ### CRITICAL: `ai/process/route.ts` — `voice.providerVoiceId` Bug
 - Line 190 was `voice?.providerVoiceId || ''` where `voice = agent.voice` (a text string)
-- Since `agent.voice` is a Piper voice ID string (not an object), `.providerVoiceId` was always `undefined`
 - Fixed to just use `agent.voice` directly; removed unused `voiceSettings` response field
 
 ### Instagram Webhook — Now Uses `resolveProviderConfig`
 - **`src/app/api/webhooks/instagram/route.ts`**: Removed hardcoded `modelMap` and env-var-based API key lookup
-- Now imports and uses `resolveProviderConfig(agent)` to dynamically resolve provider from DB
-- Agent's `provider` relationship is respected for Instagram channel too
 
 ### WhatsApp Shared — Dead Code Cleanup
-- **`src/app/api/webhooks/whatsapp/shared.ts`**: Removed unused `modelMap` constant (was defined but never used — `resolveProviderConfig` was already being called)
+- **`src/app/api/webhooks/whatsapp/shared.ts`**: Removed unused `modelMap` constant
 
 ### ws-server — Voice ID Now Passed to TTS
-- **`ws-server/src/media-stream.ts`**: `processAudio` now extracts `data.voiceId` from AI process response and passes it to `generateAndSendTTS(send, session, aiResponse, voiceId)`
-- `synthesizeLocal(text, voiceId)` already supported optional `voiceId` but it was never passed
-- Real phone calls now use the agent's configured Piper voice instead of Piper's default
+- **`ws-server/src/media-stream.ts`**: `processAudio` passes `voiceId` to `generateAndSendTTS` for real calls
+
+### ElevenLabs Cloud TTS Integration
+- **`/api/voices/tts`**: Non-streaming endpoint (`POST /v1/text-to-speech/{voice_id}`), model `eleven_multilingual_v2`, format `mp3_44100_128`. Piper voice ID'leri otomatik olarak Rachel (`21m00Tcm4TlvDq8ikWAM`)'e fallback yapar.
+- **`/api/voices/list`**: Piper + ElevenLabs seslerini birlikte döner. ElevenLabs API çağrısı başarısızsa `hasElevenLabs: false`.
+- **`ws-server/src/media-stream.ts`**: Aynı non-streaming endpoint, `ulaw_8000` formatı ile Twilio uyumlu.
+- **Per-agent `ttsProvider`**: `auto` / `elevenlabs` / `piper` seçenekleri. Admin panelde inline TTS badge ile çevrim, dashboard formda dropdown.
+- **Dashboard form**: ElevenLabs seçilince `/api/voices/list`'i çağırıp sesleri çeker, loading/error states gösterir. Piper/ElevenLabs sesleri dynamic dropdown'da listelenir.
+- **Admin panel**: TTS provider inline çevrimde otomatik voice değiştirmez — kullanıcı dashboard formdan ses seçer.
 
 ### Infrastructure
-- **`portainer-stack.yml`** and **`docker-compose.yml`**: `PIPER_TTS_URL` and `WHISPER_SERVER_URL` env vars added to app container for explicit service discovery
-- Piper TTS on port 3503:5000 (health checks pass ✅)
-- Whisper STT on port 3502:9000 (ASR endpoint responds ✅)
+- **`portainer-stack.yml`** and **`docker-compose.yml`**: `PIPER_TTS_URL`, `WHISPER_SERVER_URL`, `ELEVENLABS_API_KEY` env vars added
+- Piper TTS port 3503 ✅, Whisper STT port 3502 ✅
 
 ### Database Migration `20260629_000000`
 - Converts `ai_providers.models` from string array to object array format
-  - Old: `["gpt-5-nano"]` → New: `[{"name":"GPT-5 Nano","modelId":"gpt-5-nano","creditCost":1}]`
-- Fixes `opentouur` provider's `provider_type` from `openai` to `openrouter` (its API key starts with `sk-or-v1`)
+- Adds `tts_provider` column to `agents` table (enum: auto/elevenlabs/piper, default: auto)
 
 ### Self-Hosted Voice Infrastructure
-- **Piper TTS**: Dockerfile in `piper-server/` — builds with `tr_TR-dfki-medium` and `en_US-lessac-medium` models
-- **Whisper STT**: Uses `onerahmet/openai-whisper-asr-webservice:latest` with `faster_whisper` engine
-- **Test endpoints**:
-  - `GET /api/voices/tts?voice=...&text=...` — proxied to Piper
-  - `POST /api/stt/transcribe` — authenticated, credit-deducted Whisper transcription
-  - `POST /api/ai/test` — authenticated, credit-deducted AI response (supports OpenAI + Anthropic)
+- **Piper TTS**: Dockerfile in `piper-server/` with `tr_TR-dfki-medium` and `en_US-lessac-medium` models
+- **Whisper STT**: `onerahmet/openai-whisper-asr-webservice:latest` with `faster_whisper`
 
-## Deployment Status (29 June 2026)
-- Build: ✅ `npm run build` passes (0 errors)
-- All services: ✅ Running on server
-- Site: ✅ Live at `http://192.168.0.243:3500`
-- Piper TTS: ✅ Port 3503 responds
-- Whisper STT: ✅ Port 3502 responds
+## Current Status (1 July 2026)
+- Build: ✅ `npm run build` + `npx tsc --noEmit` passes (0 errors)
+- ws-server: ✅ `npx tsc --noEmit` passes
+- All services: ✅ Running on server at `http://192.168.0.243:3500`
+- **Edge TTS: ✅ Integrated** — Microsoft Edge Read Aloud API, no API key needed, free unlimited. Default TTS provider (auto mode: edge-tts -> piper -> elevenlabs).
+- **ElevenLabs TTS: ⚠️ 402 Payment Required** — API key valid, but no credits. `elevenlabs.io` account needs credit load.
 - DNS: ⏳ `callcrafter.com.tr` + `ws.callcrafter.com.tr` propagation pending
 
 ## Portainer Setup
@@ -169,7 +177,7 @@ WA_BRIDGE_WEBHOOK_SECRET=<for QR bridge webhooks>
 WHATSAPP_CONTEXT_RESET_MINUTES=30
 ```
 
-(ELEVENLABS_API_KEY no longer needed — TTS is fully self-hosted via Piper)
+ELEVENLABS_API_KEY=sk_...  # ElevenLabs API key (cloud TTS, requires paid account credits)
 
 ### GitHub Secrets
 | Secret                     | Description                          |
@@ -214,7 +222,7 @@ CallCrafter/
 │   ├── ai/
 │   │   ├── orchestrator/     # AgentOrchestrator (OpenAI/Anthropic, tool calling)
 │   │   ├── stt/              # STTModule (Whisper)
-│   │   ├── tts/              # ElevenLabsTTS (legacy)
+│   │   ├── tts/              # ElevenLabsTTS, EdgeTTS, TTSModule
 │   │   ├── rag/              # RAGPipeline (LangChain)
 │   │   └── tools/            # ToolRegistry
 │   ├── billing/              # creditMiddleware, StripeService
@@ -281,6 +289,7 @@ CallCrafter/
 - HTTP + WebSocket on same port (8080), WS attached to HTTP server
 - Communicates with app via HTTP with `INTERNAL_API_KEY`
 - Twilio audio: mulaw 8kHz, 20ms chunks (160 bytes)
+- Edge TTS: MP3 via msedge-tts → ffmpeg → mulaw 8kHz (Twilio compatible)
 - Piper TTS output: WAV with pcm_mulaw codec (8kHz, 1 channel)
 - Whisper STT: POST `/asr` with `audio_file` multipart form
 
@@ -293,5 +302,6 @@ cd ws-server && npx tsc --noEmit  # ws-server TS check
 
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
-- 4 Pricing Plans, 5 Default Voices
+- 4 Pricing Plans, 12 Default Voices (Piper) + 14 Edge TTS Voices
 - 2 AI Providers: OpenAI (gpt-5-nano), OpenRouter (openrouter/free)
+- Default TTS provider: `auto` (Edge TTS -> Piper -> ElevenLabs fallback)

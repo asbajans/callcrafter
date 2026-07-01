@@ -1,4 +1,10 @@
 import { sleep } from './utils.js';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import { execFile } from 'node:child_process';
+import { writeFile, unlink, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 interface CallSession {
   callSid: string;
@@ -146,6 +152,53 @@ async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> 
   return Buffer.from(arrayBuffer);
 }
 
+async function synthesizeEdge(text: string, voiceId?: string): Promise<Buffer> {
+  const cleanText = text
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!cleanText) throw new Error('No speakable text after sanitization');
+
+  const DEFAULT_EDGE_VOICE = 'tr-TR-EmelNeural';
+  const isEdgeVoice = voiceId ? /^([a-z]{2}-[A-Z]{2})-/.test(voiceId) : false;
+  const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_EDGE_VOICE : voiceId;
+
+  const tts = new MsEdgeTTS();
+  await tts.setMetadata(effectiveVoice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+
+  const { audioStream } = tts.toStream(cleanText);
+  const chunks: Buffer[] = [];
+  for await (const chunk of audioStream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const mp3Buffer = Buffer.concat(chunks);
+
+  // Convert MP3 to mulaw 8kHz for Twilio via ffmpeg
+  const tmpId = randomBytes(8).toString('hex');
+  const tmpMp3 = join(tmpdir(), `edge-tts-${tmpId}.mp3`);
+  const tmpWav = join(tmpdir(), `edge-tts-${tmpId}.wav`);
+
+  try {
+    await writeFile(tmpMp3, mp3Buffer);
+    await new Promise<void>((resolve, reject) => {
+      execFile('ffmpeg', [
+        '-y', '-i', tmpMp3,
+        '-ar', '8000', '-ac', '1',
+        '-acodec', 'pcm_mulaw',
+        tmpWav,
+      ], { timeout: 15000 }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    const wavBuffer = await readFile(tmpWav);
+    return wavBuffer;
+  } finally {
+    await unlink(tmpMp3).catch(() => {});
+    await unlink(tmpWav).catch(() => {});
+  }
+}
+
 export async function processAudio(
   send: (payload: string) => void,
   session: CallSession,
@@ -224,10 +277,24 @@ async function generateAndSendTTS(
   ttsProvider?: string,
 ): Promise<void> {
   try {
-    const useCloud = ttsProvider === 'elevenlabs' || (ttsProvider !== 'piper' && elevenLabsApiKey);
-    const mulawAudio = useCloud
-      ? await synthesizeCloud(text, voiceId)
-      : await synthesizeLocal(text, voiceId);
+    let mulawAudio: Buffer;
+
+    if (ttsProvider === 'edge-tts') {
+      mulawAudio = await synthesizeEdge(text, voiceId);
+    } else if (ttsProvider === 'piper') {
+      mulawAudio = await synthesizeLocal(text, voiceId);
+    } else if (ttsProvider === 'elevenlabs' && elevenLabsApiKey) {
+      mulawAudio = await synthesizeCloud(text, voiceId);
+    } else if (elevenLabsApiKey) {
+      mulawAudio = await synthesizeCloud(text, voiceId);
+    } else {
+      // auto fallback: edge-tts -> piper
+      try {
+        mulawAudio = await synthesizeEdge(text, voiceId);
+      } catch {
+        mulawAudio = await synthesizeLocal(text, voiceId);
+      }
+    }
 
     if (mulawAudio.length === 0) {
       console.error('TTS returned empty audio');

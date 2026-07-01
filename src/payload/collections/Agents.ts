@@ -42,9 +42,10 @@ export const Agents: CollectionConfig = {
       type: 'select',
       defaultValue: 'auto',
       options: [
-        { label: 'Otomatik (ElevenLabs varsa onu kullan)', value: 'auto' },
-        { label: 'ElevenLabs', value: 'elevenlabs' },
-        { label: 'Piper (yerel)', value: 'piper' },
+        { label: 'Otomatik (önce Edge TTS, sonra Piper)', value: 'auto' },
+        { label: 'Edge TTS (Microsoft, ücretsiz)', value: 'edge-tts' },
+        { label: 'Piper (yerel, offline)', value: 'piper' },
+        { label: 'ElevenLabs (ücretli)', value: 'elevenlabs' },
       ],
       admin: {
         description: 'Hangi TTS motorunun kullanılacağı',

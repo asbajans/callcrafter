@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { edgeTTS } from '@/ai/tts/EdgeTTS';
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1';
 
@@ -32,7 +33,10 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
   if (!res.ok) {
     const errBody = await res.text().catch(() => '');
     console.error(`ElevenLabs TTS error (${res.status}): ${errBody.slice(0, 500)}`);
-    return NextResponse.json({ error: errBody || 'ElevenLabs TTS failed' }, { status: res.status });
+    const message = res.status === 402
+      ? 'ElevenLabs hesabınızda yetersiz bakiye. Lütfen elevenlabs.io hesabınıza kredi yükleyin.'
+      : errBody || 'ElevenLabs TTS failed';
+    return NextResponse.json({ error: message }, { status: res.status });
   }
 
   const audio = await res.arrayBuffer();
@@ -42,6 +46,33 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
       'Cache-Control': 'no-cache',
     },
   });
+}
+
+async function edgeTTSSynthesis(voiceId: string, text: string): Promise<NextResponse> {
+  const cleanText = text
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!cleanText) {
+    return NextResponse.json({ error: 'No speakable text after sanitization' }, { status: 400 });
+  }
+
+  const DEFAULT_EDGE_VOICE = 'tr-TR-EmelNeural';
+  const isEdgeVoice = /^([a-z]{2}-[A-Z]{2})-/.test(voiceId);
+  const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_EDGE_VOICE : voiceId;
+
+  try {
+    const audio = await edgeTTS.synthesize(cleanText, { voice: effectiveVoice });
+    return new NextResponse(new Uint8Array(audio), {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (err: any) {
+    console.error(`Edge TTS error: ${err.message}`);
+    return NextResponse.json({ error: err.message || 'Edge TTS failed' }, { status: 500 });
+  }
 }
 
 async function piperTTS(voiceId: string, text: string): Promise<NextResponse> {
@@ -83,13 +114,20 @@ export async function GET(req: NextRequest) {
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
 
   try {
-    if (provider === 'elevenlabs' || (provider === 'auto' && elevenLabsKey)) {
+    if (provider === 'edge-tts') {
+      return await edgeTTSSynthesis(voiceId, text);
+    }
+    if (provider === 'piper') {
+      return await piperTTS(voiceId, text);
+    }
+    if (provider === 'elevenlabs') {
       if (!elevenLabsKey) {
         return NextResponse.json({ error: 'ElevenLabs API key not configured' }, { status: 400 });
       }
       return await elevenLabsTTS(voiceId, text, elevenLabsKey);
     }
-    return await piperTTS(voiceId, text);
+    // auto: edge-tts -> piper -> elevenlabs
+    return await edgeTTSSynthesis(voiceId, text);
   } catch (err: any) {
     console.error('TTS error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
