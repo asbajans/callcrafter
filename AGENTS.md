@@ -91,7 +91,8 @@ Browser → MediaRecorder + VAD (RMS energy threshold)
 ## Recent Fixes & Changes (1 July 2026)
 
 ### Edge TTS (Microsoft) Integration — Free Unlimited TTS
-- **`src/ai/tts/EdgeTTS.ts`**: New Edge TTS wrapper class using `msedge-tts` npm package. Microsoft Edge Read Aloud API — no API key required, free unlimited usage.
+- **`src/ai/tts/EdgeTTS.ts`**: Custom Edge TTS implementation using Microsoft's WebSocket protocol directly (no npm dependency). Uses `ws` library already in the project.
+- **`ws-server/src/edge-tts.ts`**: Same custom Edge TTS implementation for ws-server (separate file, no shared imports between projects).
 - **`src/lib/voices.ts`**: Added `EDGE_TTS_VOICES` array with 14 pre-configured voices (TR/EN/DE/FR/ES). Each voice has `provider: 'edge-tts'` field.
 - **`src/payload/collections/Agents.ts`**: `ttsProvider` field updated: `auto` / `edge-tts` / `piper` / `elevenlabs`. Default is `auto` (edge-tts -> piper -> elevenlabs fallback).
 - **`/api/voices/tts`**: Added `edge-tts` provider path. Returns MP3 audio for browser playback. Voice ID format: `tr-TR-EmelNeural`.
@@ -100,7 +101,7 @@ Browser → MediaRecorder + VAD (RMS energy threshold)
 - **Dashboard form**: TTS provider dropdown now shows 4 options. Edge TTS voices appear in dynamic dropdown when selected.
 - **Dockerfile** (app): Added `ffmpeg` to alpine runner for potential audio conversion needs.
 - **ws-server/Dockerfile**: Added `ffmpeg` to alpine runner for Edge TTS MP3->mulaw conversion.
-- **Dependencies**: `msedge-tts` added to both app and ws-server `package.json`.
+- **Dependencies**: `msedge-tts` removed — custom implementation uses project's existing `ws` library.
 
 ### ElevenLabs Cloud TTS Integration (29 June 2026)
 - **`AiProviders.apiKey`** field now has `access.read: () => false` to prevent REST API exposure of API keys

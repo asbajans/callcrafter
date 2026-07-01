@@ -1,5 +1,5 @@
 import { sleep } from './utils.js';
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import { synthesizeEdgeTTS } from './edge-tts.js';
 import { execFile } from 'node:child_process';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -153,25 +153,7 @@ async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> 
 }
 
 async function synthesizeEdge(text: string, voiceId?: string): Promise<Buffer> {
-  const cleanText = text
-    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-    .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-
-  if (!cleanText) throw new Error('No speakable text after sanitization');
-
-  const DEFAULT_EDGE_VOICE = 'tr-TR-EmelNeural';
-  const isEdgeVoice = voiceId ? /^([a-z]{2}-[A-Z]{2})-/.test(voiceId) : false;
-  const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_EDGE_VOICE : voiceId;
-
-  const tts = new MsEdgeTTS();
-  await tts.setMetadata(effectiveVoice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-
-  const { audioStream } = tts.toStream(cleanText);
-  const chunks: Buffer[] = [];
-  for await (const chunk of audioStream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const mp3Buffer = Buffer.concat(chunks);
+  const mp3Buffer = await synthesizeEdgeTTS(text, voiceId);
 
   // Convert MP3 to mulaw 8kHz for Twilio via ffmpeg
   const tmpId = randomBytes(8).toString('hex');

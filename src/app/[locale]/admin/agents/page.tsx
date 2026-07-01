@@ -145,13 +145,14 @@ export default function AdminAgentsPage() {
   const ttsLabel = (val: string | null | undefined): string => {
     switch (val) {
       case 'elevenlabs': return 'ElevenLabs';
+      case 'edge-tts': return 'Edge TTS';
       case 'piper': return 'Piper';
       default: return 'Otomatik';
     }
   };
 
   const cycleTts = (current: string | null | undefined): string => {
-    const order = ['auto', 'elevenlabs', 'piper'];
+    const order = ['auto', 'edge-tts', 'piper', 'elevenlabs'];
     const idx = order.indexOf(current || 'auto');
     return order[(idx + 1) % order.length];
   };
@@ -247,7 +248,7 @@ export default function AdminAgentsPage() {
                         onClick={() => changeTts(agent.id, cycleTts(agent.ttsProvider))}
                         disabled={savingId === agent.id}
                         className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer disabled:opacity-50"
-                        title="Tıklayarak değiştir: Otomatik → ElevenLabs → Piper → Otomatik"
+                        title="Tıklayarak değiştir: Otomatik → Edge TTS → Piper → ElevenLabs → Otomatik"
                       >
                         {savingId === agent.id ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
