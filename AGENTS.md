@@ -91,8 +91,10 @@ Browser → MediaRecorder + VAD (RMS energy threshold)
 ## Recent Fixes & Changes (1 July 2026)
 
 ### Edge TTS (Microsoft) Integration — Free Unlimited TTS
-- **`src/ai/tts/EdgeTTS.ts`**: Custom Edge TTS implementation using Microsoft's WebSocket protocol directly (no npm dependency). Uses `ws` library already in the project.
-- **`ws-server/src/edge-tts.ts`**: Same custom Edge TTS implementation for ws-server (separate file, no shared imports between projects).
+- **`src/ai/tts/EdgeTTS.ts`**: Custom Edge TTS implementation with **Sec-MS-GEC token** generation (DRM). Uses Microsoft's WebSocket protocol with proper SHA256 token, MUID cookie, and Chromium version headers.
+- **`ws-server/src/edge-tts.ts`**: Same implementation for ws-server.
+- Token generation: Windows file time epoch → round to 5min → SHA256 with TrustedClientToken → uppercase hex.
+- Headers: `Sec-MS-GEC`, `Sec-MS-GEC-Version=1-143.0.3650.75`, `Cookie: muid=...`, proper User-Agent/Origin.
 - **`src/lib/voices.ts`**: Added `EDGE_TTS_VOICES` array with 14 pre-configured voices (TR/EN/DE/FR/ES). Each voice has `provider: 'edge-tts'` field.
 - **`src/payload/collections/Agents.ts`**: `ttsProvider` field updated: `auto` / `edge-tts` / `piper` / `elevenlabs`. Default is `auto` (edge-tts -> piper -> elevenlabs fallback).
 - **`/api/voices/tts`**: Added `edge-tts` provider path. Returns MP3 audio for browser playback. Voice ID format: `tr-TR-EmelNeural`.

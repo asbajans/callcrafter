@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
@@ -122,6 +122,9 @@ function AgentFormModal({
   const [loadingElevenLabs, setLoadingElevenLabs] = useState(false);
   const [elevenLabsError, setElevenLabsError] = useState<string | null>(null);
   const [elevenLabsFetched, setElevenLabsFetched] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setForm(initialData ?? defaultFormData);
@@ -129,6 +132,7 @@ function AgentFormModal({
     setElevenLabsVoices([]);
     setElevenLabsError(null);
     setElevenLabsFetched(false);
+    setVoiceDropdownOpen(false);
   }, [initialData, open]);
 
   const fetchElevenLabsVoices = useCallback(async () => {
@@ -155,14 +159,51 @@ function AgentFormModal({
     }
   }, [form.ttsProvider, elevenLabsFetched, loadingElevenLabs, fetchElevenLabsVoices]);
 
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const previewVoice = useCallback(async (voiceId: string, provider: string) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (previewingVoice === voiceId) {
+      setPreviewingVoice(null);
+      return;
+    }
+    setPreviewingVoice(voiceId);
+    try {
+      const testText = voiceId.startsWith('tr-') || voiceId.startsWith('tr_')
+        ? 'Merhaba, ben CallCrafter yapay zeka asistanıyım. Size nasıl yardımcı olabilirim?'
+        : 'Hello, I am CallCrafter AI assistant. How can I help you today?';
+      const res = await fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(testText)}&provider=${provider}`);
+      if (!res.ok) throw new Error('TTS failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; setPreviewingVoice(null); };
+      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; setPreviewingVoice(null); };
+      audio.play();
+    } catch {
+      setPreviewingVoice(null);
+    }
+  }, [previewingVoice]);
+
   const update = <K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
       if (key === 'provider') {
         next.model = undefined;
       }
-      if (key === 'ttsProvider' && value !== 'elevenlabs') {
-        next.voice = next.voice || '';
+      if (key === 'ttsProvider') {
+        next.voice = '';
       }
       return next;
     });
@@ -197,6 +238,8 @@ function AgentFormModal({
   const availableVoices = useElevenLabs
     ? elevenLabsVoices
     : voices.filter((v) => useEdgeTTS ? (v.provider === 'edge-tts') : (v.provider === 'piper'));
+
+  const selectedVoiceName = availableVoices.find(v => v.id === form.voice)?.name || form.voice || '';
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
     const current = form.channels;
@@ -325,39 +368,64 @@ function AgentFormModal({
                     </button>
                   </div>
                 ) : (
-                  <Select.Root value={form.voice} onValueChange={(v) => update('voice', v)}>
-                    <Select.Trigger
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setVoiceDropdownOpen(!voiceDropdownOpen)}
+                      onBlur={() => setTimeout(() => setVoiceDropdownOpen(false), 200)}
                       className={cn(
                         'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
                         errors.voice ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
                       )}
                     >
-                      <Select.Value placeholder="Ses seç" />
-                      <Select.Icon>
-                        <ChevronDown className="w-4 h-4 text-slate-500" />
-                      </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                      <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                        <Select.Viewport>
-                          {availableVoices.map((v) => (
-                            <Select.Item
-                              key={v.id}
-                              value={v.id}
-                              className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                      <span className={form.voice ? 'text-slate-100' : 'text-slate-600'}>
+                        {form.voice ? selectedVoiceName : 'Ses seç'}
+                      </span>
+                      <ChevronDown className={cn('w-4 h-4 text-slate-500 transition-transform', voiceDropdownOpen && 'rotate-180')} />
+                    </button>
+                    {voiceDropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                        {availableVoices.map((v) => (
+                          <div
+                            key={v.id}
+                            className={cn(
+                              'flex items-center justify-between px-3.5 py-2.5 text-sm cursor-pointer transition-colors',
+                              form.voice === v.id
+                                ? 'bg-indigo-600/30 text-indigo-200'
+                                : 'text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200'
+                            )}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              update('voice', v.id);
+                              setVoiceDropdownOpen(false);
+                            }}
+                          >
+                            <span className="truncate">
+                              {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : (v as any).provider === 'edge-tts' ? '(Edge TTS)' : `(${(v as any).language || ''})`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                previewVoice(v.id, (v as any).provider || form.ttsProvider || 'edge-tts');
+                              }}
+                              className="ml-2 p-1 rounded-md hover:bg-white/10 transition-colors shrink-0"
+                              title="Sesi dinle"
                             >
-                              <Select.ItemText>
-                                {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : `(${(v as any).language || ''})`}
-                              </Select.ItemText>
-                            </Select.Item>
-                          ))}
-                          {availableVoices.length === 0 && (
-                            <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
-                          )}
-                        </Select.Viewport>
-                      </Select.Content>
-                    </Select.Portal>
-                  </Select.Root>
+                              {previewingVoice === v.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-300" />
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                        {availableVoices.length === 0 && (
+                          <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {errors.voice && <p className="text-xs text-red-400">{errors.voice}</p>}
               </div>
@@ -652,7 +720,7 @@ export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [voices] = useState<(Voice & { provider?: string })[]>([]);
+  const [voices, setVoices] = useState<(Voice & { provider?: string })[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -680,6 +748,19 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const fetchVoices = useCallback(async () => {
+    try {
+      const data = await api.getVoices();
+      const allVoices = data.voices ?? [];
+      setVoices(allVoices.map((v: any) => ({
+        ...v,
+        id: v.id || v.voiceId,
+      })));
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   const fetchProviders = useCallback(async () => {
     try {
       const data = await api.getAiProviders();
@@ -692,6 +773,7 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
     fetchProviders();
+    fetchVoices();
   }, [fetchAgents, fetchProviders]);
 
   const handleCreate = () => {

@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
-import { randomBytes } from 'node:crypto';
-import { Readable } from 'node:stream';
+import { randomBytes, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 export interface EdgeTTSVoice {
   id: string;
@@ -10,33 +10,46 @@ export interface EdgeTTSVoice {
   locale: string;
 }
 
-export interface EdgeTTSOptions {
-  voice?: string;
-  rate?: string;
-  pitch?: string;
-  volume?: string;
-}
-
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const EDGE_WSS_URL = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
+const BASE_URL = 'speech.platform.bing.com/consumer/speech/synthesize/readaloud';
+const WSS_URL = `wss://${BASE_URL}/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
+const VOICE_LIST_URL = `https://${BASE_URL}/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
 
-const VOICE_LIST_URL = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
+const CHROMIUM_FULL_VERSION = '143.0.3650.75';
+const CHROMIUM_MAJOR_VERSION = CHROMIUM_FULL_VERSION.split('.')[0];
+const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
 
-const OUTPUT_FORMAT = 'audio-24khz-96kbitrate-mono-mp3';
+const WIN_EPOCH = 11644473600;
+const S_TO_NS = 1e9;
 
-function generateRequestId(): string {
-  return `fac9${randomBytes(8).toString('hex')}f3b5`;
+function generateSecMsGec(): string {
+  let ticks = Date.now() / 1000;
+  ticks += WIN_EPOCH;
+  ticks -= ticks % 300;
+  ticks *= S_TO_NS / 100;
+  const strToHash = `${ticks.toFixed(0)}${TRUSTED_CLIENT_TOKEN}`;
+  return createHash('sha256').update(strToHash, 'ascii').digest('hex').toUpperCase();
 }
 
-function createSSML(text: string, voice: string, rate: string, pitch: string, volume: string): string {
-  const timestamp = new Date().toISOString().replace('T', ' ').replace('Z', '');
-  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='tr-TR'>
-  <voice name='${voice}'>
-    <prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>
-      ${escapeXml(text)}
-    </prosody>
-  </voice>
-</speak>`;
+function generateMuid(): string {
+  return randomBytes(16).toString('hex').toUpperCase();
+}
+
+function generateConnectionId(): string {
+  return randomUUID().replace(/-/g, '');
+}
+
+function getWsHeaders(): Record<string, string> {
+  const muid = generateMuid();
+  return {
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache',
+    'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_MAJOR_VERSION}.0.0.0 Safari/537.36 Edg/${CHROMIUM_MAJOR_VERSION}.0.0.0`,
+    'Accept-Encoding': 'gzip, deflate, br, zstd',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cookie': `muid=${muid};`,
+  };
 }
 
 function escapeXml(text: string): string {
@@ -48,17 +61,52 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function createConfigMessage(requestId: string): string {
-  return `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"${OUTPUT_FORMAT}"}}}}`;
+function createSSML(text: string, voice: string, rate: string, pitch: string, volume: string): string {
+  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='tr-TR'>
+  <voice name='${voice}'>
+    <prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>
+      ${escapeXml(text)}
+    </prosody>
+  </voice>
+</speak>`;
+}
+
+function createConfigMessage(): string {
+  return [
+    `X-Timestamp:${new Date().toUTCString()}`,
+    'Content-Type:application/json; charset=utf-8',
+    'Path:speech.config',
+    '',
+    JSON.stringify({
+      context: {
+        synthesis: {
+          audio: {
+            metadataoptions: {
+              sentenceBoundaryEnabled: 'false',
+              wordBoundaryEnabled: 'false',
+            },
+            outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
+          },
+        },
+      },
+    }),
+  ].join('\r\n');
 }
 
 function createSSMLMessage(requestId: string, ssml: string): string {
-  const timestamp = new Date().toISOString().replace('T', ' ').replace('Z', '');
-  return `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`;
+  const timestamp = new Date().toUTCString();
+  return [
+    `X-RequestId:${requestId}`,
+    'Content-Type:application/ssml+xml',
+    `X-Timestamp:${timestamp}Z`,
+    'Path:ssml',
+    '',
+    ssml,
+  ].join('\r\n');
 }
 
 export class EdgeTTS {
-  async synthesize(text: string, options: EdgeTTSOptions = {}): Promise<Buffer> {
+  async synthesize(text: string, options: { voice?: string; rate?: string; pitch?: string; volume?: string } = {}): Promise<Buffer> {
     const cleanText = text
       .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
       .replace(/\n+/g, ' ')
@@ -72,15 +120,17 @@ export class EdgeTTS {
     const pitch = options.pitch || '+0Hz';
     const volume = options.volume || '+0%';
 
+    const secMsGec = generateSecMsGec();
+    const connectionId = generateConnectionId();
+    const requestId = `fac9${randomBytes(8).toString('hex')}f3b5`;
+
+    const wsUrl = `${WSS_URL}&ConnectionId=${connectionId}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
+
     return new Promise<Buffer>((resolve, reject) => {
       const audioChunks: Buffer[] = [];
-      const requestId = generateRequestId();
 
-      const ws = new WebSocket(EDGE_WSS_URL, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
-          'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-        },
+      const ws = new WebSocket(wsUrl, {
+        headers: getWsHeaders(),
       });
 
       const timeout = setTimeout(() => {
@@ -89,12 +139,9 @@ export class EdgeTTS {
       }, 30000);
 
       ws.on('open', () => {
-        const configMsg = createConfigMessage(requestId);
-        ws.send(configMsg);
-
+        ws.send(createConfigMessage());
         const ssml = createSSML(cleanText, voice, rate, pitch, volume);
-        const ssmlMsg = createSSMLMessage(requestId, ssml);
-        ws.send(ssmlMsg);
+        ws.send(createSSMLMessage(requestId, ssml));
       });
 
       ws.on('message', (data: Buffer | string, isBinary: boolean) => {
@@ -106,10 +153,9 @@ export class EdgeTTS {
             resolve(Buffer.concat(audioChunks));
           }
         } else {
-          // Binary audio data — first 2 bytes are header length
           const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
           if (buf.length > 2) {
-            const headerLen = buf.readUInt16LE(0);
+            const headerLen = buf.readUInt16BE(0);
             const audioData = buf.subarray(2 + headerLen);
             if (audioData.length > 0) {
               audioChunks.push(audioData);
@@ -120,7 +166,7 @@ export class EdgeTTS {
 
       ws.on('error', (err) => {
         clearTimeout(timeout);
-        reject(new Error(`Edge TTS WebSocket error: ${err.message}`));
+        reject(new Error(`Edge TTS error: ${err.message}`));
       });
 
       ws.on('close', () => {
@@ -132,14 +178,10 @@ export class EdgeTTS {
     });
   }
 
-  async synthesizeRaw(text: string, voice: string, format: string = 'mp3'): Promise<Buffer> {
-    return this.synthesize(text, { voice });
-  }
-
   async listVoices(): Promise<EdgeTTSVoice[]> {
     const res = await fetch(VOICE_LIST_URL, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36`,
       },
       signal: AbortSignal.timeout(10000),
     });

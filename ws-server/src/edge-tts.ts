@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 
 export interface EdgeTTSVoice {
   id: string;
@@ -10,12 +10,45 @@ export interface EdgeTTSVoice {
 }
 
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const EDGE_WSS_URL = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
-const VOICE_LIST_URL = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
-const OUTPUT_FORMAT = 'audio-24khz-96kbitrate-mono-mp3';
+const BASE_URL = 'speech.platform.bing.com/consumer/speech/synthesize/readaloud';
+const WSS_URL = `wss://${BASE_URL}/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
+const VOICE_LIST_URL = `https://${BASE_URL}/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
 
-function generateRequestId(): string {
-  return `fac9${randomBytes(8).toString('hex')}f3b5`;
+const CHROMIUM_FULL_VERSION = '143.0.3650.75';
+const CHROMIUM_MAJOR_VERSION = CHROMIUM_FULL_VERSION.split('.')[0];
+const SEC_MS_GEC_VERSION = `1-${CHROMIUM_FULL_VERSION}`;
+
+const WIN_EPOCH = 11644473600;
+const S_TO_NS = 1e9;
+
+function generateSecMsGec(): string {
+  let ticks = Date.now() / 1000;
+  ticks += WIN_EPOCH;
+  ticks -= ticks % 300;
+  ticks *= S_TO_NS / 100;
+  const strToHash = `${ticks.toFixed(0)}${TRUSTED_CLIENT_TOKEN}`;
+  return createHash('sha256').update(strToHash, 'ascii').digest('hex').toUpperCase();
+}
+
+function generateMuid(): string {
+  return randomBytes(16).toString('hex').toUpperCase();
+}
+
+function generateConnectionId(): string {
+  return randomUUID().replace(/-/g, '');
+}
+
+function getWsHeaders(): Record<string, string> {
+  const muid = generateMuid();
+  return {
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache',
+    'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_MAJOR_VERSION}.0.0.0 Safari/537.36 Edg/${CHROMIUM_MAJOR_VERSION}.0.0.0`,
+    'Accept-Encoding': 'gzip, deflate, br, zstd',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cookie': `muid=${muid};`,
+  };
 }
 
 function escapeXml(text: string): string {
@@ -38,12 +71,37 @@ function createSSML(text: string, voice: string, rate: string, pitch: string, vo
 }
 
 function createConfigMessage(): string {
-  return `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"${OUTPUT_FORMAT}"}}}}`;
+  return [
+    `X-Timestamp:${new Date().toUTCString()}`,
+    'Content-Type:application/json; charset=utf-8',
+    'Path:speech.config',
+    '',
+    JSON.stringify({
+      context: {
+        synthesis: {
+          audio: {
+            metadataoptions: {
+              sentenceBoundaryEnabled: 'false',
+              wordBoundaryEnabled: 'false',
+            },
+            outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
+          },
+        },
+      },
+    }),
+  ].join('\r\n');
 }
 
 function createSSMLMessage(requestId: string, ssml: string): string {
-  const timestamp = new Date().toISOString().replace('T', ' ').replace('Z', '');
-  return `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`;
+  const timestamp = new Date().toUTCString();
+  return [
+    `X-RequestId:${requestId}`,
+    'Content-Type:application/ssml+xml',
+    `X-Timestamp:${timestamp}Z`,
+    'Path:ssml',
+    '',
+    ssml,
+  ].join('\r\n');
 }
 
 export async function synthesizeEdgeTTS(
@@ -65,15 +123,17 @@ export async function synthesizeEdgeTTS(
   const isEdgeVoice = voiceId ? /^([a-z]{2}-[A-Z]{2})-/.test(voiceId) : false;
   const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_VOICE : voiceId;
 
+  const secMsGec = generateSecMsGec();
+  const connectionId = generateConnectionId();
+  const requestId = `fac9${randomBytes(8).toString('hex')}f3b5`;
+
+  const wsUrl = `${WSS_URL}&ConnectionId=${connectionId}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
+
   return new Promise<Buffer>((resolve, reject) => {
     const audioChunks: Buffer[] = [];
-    const requestId = generateRequestId();
 
-    const ws = new WebSocket(EDGE_WSS_URL, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
-        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-      },
+    const ws = new WebSocket(wsUrl, {
+      headers: getWsHeaders(),
     });
 
     const timeout = setTimeout(() => {
@@ -98,7 +158,7 @@ export async function synthesizeEdgeTTS(
       } else {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         if (buf.length > 2) {
-          const headerLen = buf.readUInt16LE(0);
+          const headerLen = buf.readUInt16BE(0);
           const audioData = buf.subarray(2 + headerLen);
           if (audioData.length > 0) {
             audioChunks.push(audioData);
@@ -124,7 +184,7 @@ export async function synthesizeEdgeTTS(
 export async function listEdgeTTSVoices(): Promise<EdgeTTSVoice[]> {
   const res = await fetch(VOICE_LIST_URL, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36`,
     },
     signal: AbortSignal.timeout(10000),
   });
