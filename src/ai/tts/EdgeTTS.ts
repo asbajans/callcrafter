@@ -1,10 +1,13 @@
-// webpack'i atla — eval ile require çağırısı webpack tarafından analiz edilemez
-// eslint-disable-next-line no-eval
-const _require = eval('require') as NodeRequire;
-const WebSocket = _require('ws');
-
 import { randomBytes, createHash } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
+
+let _ws: any = null;
+async function getWs(): Promise<any> {
+  if (_ws) return _ws;
+  const mod = await import('ws');
+  _ws = mod.default || mod;
+  return _ws;
+}
 
 export interface EdgeTTSVoice {
   id: string;
@@ -130,10 +133,12 @@ export class EdgeTTS {
 
     const wsUrl = `${WSS_URL}&ConnectionId=${connectionId}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
 
+    const WebSocketClass = await getWs();
+
     return new Promise<Buffer>((resolve, reject) => {
       const audioChunks: Buffer[] = [];
 
-      const ws = new WebSocket(wsUrl, {
+      const ws = new WebSocketClass(wsUrl, {
         headers: getWsHeaders(),
       });
 

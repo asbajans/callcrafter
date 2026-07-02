@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { edgeTTS } from '@/ai/tts/EdgeTTS';
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1';
+const WS_SERVER_URL = process.env.WS_SERVER_URL || 'http://ws-server:8080';
 
 async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Promise<NextResponse> {
   const cleanText = text
@@ -62,8 +62,16 @@ async function edgeTTSSynthesis(voiceId: string, text: string): Promise<NextResp
   const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_EDGE_VOICE : voiceId;
 
   try {
-    const audio = await edgeTTS.synthesize(cleanText, { voice: effectiveVoice });
-    return new NextResponse(new Uint8Array(audio), {
+    const wsUrl = `${WS_SERVER_URL}/tts/edge?voice=${encodeURIComponent(effectiveVoice)}&text=${encodeURIComponent(cleanText)}`;
+    const res = await fetch(wsUrl, { signal: AbortSignal.timeout(30000) });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Edge TTS failed' }));
+      throw new Error(err.error || `Edge TTS error (${res.status})`);
+    }
+
+    const audio = await res.arrayBuffer();
+    return new NextResponse(audio, {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Cache-Control': 'no-cache',
