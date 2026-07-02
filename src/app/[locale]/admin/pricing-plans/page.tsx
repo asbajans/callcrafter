@@ -56,12 +56,9 @@ export default function PricingPlansPage() {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState('');
-  const [formCurrency, setFormCurrency] = useState('usd');
   const [formBillingCycle, setFormBillingCycle] = useState<'monthly' | 'yearly' | 'one_time'>('monthly');
   const [formStatus, setFormStatus] = useState<'active' | 'inactive' | 'deprecated'>('active');
   const [formDisplayOrder, setFormDisplayOrder] = useState('0');
-  const [formStripePriceId, setFormStripePriceId] = useState('');
-  const [formStripeProductId, setFormStripeProductId] = useState('');
   const [formLimits, setFormLimits] = useState<PlanLimits>({ ...defaultLimits });
   const [formFeatures, setFormFeatures] = useState<{ name: string; value: string; included: boolean }[]>([]);
 
@@ -86,12 +83,9 @@ export default function PricingPlansPage() {
     setFormName('');
     setFormDescription('');
     setFormPrice('');
-    setFormCurrency('usd');
     setFormBillingCycle('monthly');
     setFormStatus('active');
     setFormDisplayOrder('0');
-    setFormStripePriceId('');
-    setFormStripeProductId('');
     setFormLimits({ ...defaultLimits });
     setFormFeatures([]);
     setEditingId(null);
@@ -101,12 +95,9 @@ export default function PricingPlansPage() {
     setFormName(plan.name);
     setFormDescription(plan.description || '');
     setFormPrice(String(plan.price));
-    setFormCurrency(plan.currency);
     setFormBillingCycle(plan.billingCycle);
     setFormStatus(plan.status);
     setFormDisplayOrder(String(plan.displayOrder));
-    setFormStripePriceId(plan.stripePriceId || '');
-    setFormStripeProductId(plan.stripeProductId || '');
     setFormLimits(plan.limits || { ...defaultLimits });
     setFormFeatures(plan.features || []);
     setEditingId(plan.id);
@@ -151,12 +142,10 @@ export default function PricingPlansPage() {
         name: formName,
         description: formDescription || undefined,
         price: parseFloat(formPrice),
-        currency: formCurrency,
+        currency: 'usd',
         billingCycle: formBillingCycle,
         status: formStatus,
         displayOrder: parseInt(formDisplayOrder) || 0,
-        stripePriceId: formStripePriceId || undefined,
-        stripeProductId: formStripeProductId || undefined,
         limits: formLimits,
         features: formFeatures.filter(f => f.name.trim()),
       };
@@ -441,21 +430,6 @@ export default function PricingPlansPage() {
                 ))}
               </div>
 
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs text-slate-400 mb-3">Stripe Integration (optional)</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Stripe Product ID</label>
-                    <input type="text" value={formStripeProductId} onChange={(e) => setFormStripeProductId(e.target.value)}
-                      placeholder="prod_..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Stripe Price ID</label>
-                    <input type="text" value={formStripePriceId} onChange={(e) => setFormStripePriceId(e.target.value)}
-                      placeholder="price_..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent" />
-                  </div>
-                </div>
-              </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200">
               <button onClick={() => setShowCreate(false)}

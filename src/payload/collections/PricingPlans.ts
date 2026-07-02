@@ -1,9 +1,73 @@
 import type { CollectionConfig } from 'payload'
+import { StripeService } from '@/billing/StripeService'
+
+async function syncStripeProduct(data: any, originalDoc?: any) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) return data
+
+  const price = typeof data.price === 'number' ? data.price : parseFloat(data.price)
+  if (price <= 0) return data
+
+  const name = data.name || originalDoc?.name
+  const description = data.description || originalDoc?.description
+  const billingCycle = data.billingCycle || originalDoc?.billingCycle
+  const existingPriceId = data.stripePriceId || originalDoc?.stripePriceId
+  const existingProductId = data.stripeProductId || originalDoc?.stripeProductId
+  const oldPrice = originalDoc?.price
+
+  // If price didn't change and we already have Stripe IDs, skip
+  if (existingPriceId && oldPrice === price) return data
+
+  const stripeService = new StripeService(stripeKey)
+
+  try {
+    // If product already exists in Stripe, update it; otherwise create
+    let productId = existingProductId
+
+    if (productId) {
+      await stripeService['stripe'].products.update(productId, { name, description })
+    } else {
+      const product = await stripeService['stripe'].products.create({ name, description: description || '' })
+      productId = product.id
+    }
+
+    // Determine interval from billing cycle
+    const interval = billingCycle === 'yearly' ? 'year' as const : billingCycle === 'monthly' ? 'month' as const : undefined
+
+    const stripePrice = await stripeService['stripe'].prices.create({
+      product: productId,
+      unit_amount: Math.round(price * 100),
+      currency: 'usd',
+      recurring: interval ? { interval } : undefined,
+    })
+
+    // Deactivate old price if it exists and differs
+    if (existingPriceId && existingPriceId !== stripePrice.id) {
+      try {
+        await stripeService['stripe'].prices.update(existingPriceId, { active: false })
+      } catch { /* non-critical */ }
+    }
+
+    data.stripeProductId = productId
+    data.stripePriceId = stripePrice.id
+  } catch (e) {
+    console.error('Stripe sync failed for plan:', name, e)
+  }
+
+  return data
+}
 
 export const PricingPlans: CollectionConfig = {
   slug: 'pricing-plans',
   admin: {
     useAsTitle: 'name',
+  },
+  hooks: {
+    beforeChange: [
+      async ({ data, originalDoc }) => {
+        return syncStripeProduct(data, originalDoc)
+      },
+    ],
   },
   fields: [
     {
