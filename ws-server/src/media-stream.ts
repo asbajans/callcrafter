@@ -1,5 +1,4 @@
 import { sleep } from './utils.js';
-import { synthesizeEdgeTTS } from './edge-tts.js';
 import { execFile } from 'node:child_process';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -23,6 +22,7 @@ const sessions = new Map<string, CallSession>();
 
 let whisperUrl = process.env.WHISPER_SERVER_URL || 'http://localhost:3502';
 let piperUrl = process.env.PIPER_TTS_URL || 'http://localhost:3503';
+let edgeTtsUrl = process.env.EDGE_TTS_URL || 'http://localhost:3504';
 let appApiUrl = process.env.APP_API_URL || 'http://localhost:3000';
 let internalApiKey = process.env.INTERNAL_API_KEY || '';
 let elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || '';
@@ -32,12 +32,14 @@ const ELEVENLABS_API = 'https://api.elevenlabs.io/v1';
 export function initMediaStream(config: {
   whisperServerUrl?: string;
   piperServerUrl?: string;
+  edgeTtsUrl?: string;
   appApiUrl?: string;
   internalApiKey?: string;
   elevenLabsApiKey?: string;
 }) {
   if (config.whisperServerUrl) whisperUrl = config.whisperServerUrl;
   if (config.piperServerUrl) piperUrl = config.piperServerUrl;
+  if (config.edgeTtsUrl) edgeTtsUrl = config.edgeTtsUrl;
   if (config.appApiUrl) appApiUrl = config.appApiUrl;
   if (config.internalApiKey) internalApiKey = config.internalApiKey;
   if (config.elevenLabsApiKey) elevenLabsApiKey = config.elevenLabsApiKey;
@@ -153,7 +155,14 @@ async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> 
 }
 
 async function synthesizeEdge(text: string, voiceId?: string): Promise<Buffer> {
-  const mp3Buffer = await synthesizeEdgeTTS(text, voiceId);
+  const voice = voiceId || 'tr-TR-EmelNeural';
+  const url = `${edgeTtsUrl}/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Edge TTS failed' }));
+    throw new Error(err.error || `Edge TTS error (${res.status})`);
+  }
+  const mp3Buffer = Buffer.from(await res.arrayBuffer());
 
   // Convert MP3 to mulaw 8kHz for Twilio via ffmpeg
   const tmpId = randomBytes(8).toString('hex');

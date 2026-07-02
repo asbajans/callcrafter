@@ -83,6 +83,7 @@ services:
       WA_BRIDGE_WEBHOOK_SECRET: ${WA_BRIDGE_WEBHOOK_SECRET}
       WHATSAPP_CONTEXT_RESET_MINUTES: ${WHATSAPP_CONTEXT_RESET_MINUTES:-30}
       PIPER_TTS_URL: http://piper-tts:5000
+      EDGE_TTS_URL: http://edge-tts:5000
       WHISPER_SERVER_URL: http://whisper-server:9000
     networks:
       - callcrafter_network
@@ -110,6 +111,7 @@ services:
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       WHISPER_SERVER_URL: http://whisper-server:9000
       PIPER_TTS_URL: http://piper-tts:5000
+      EDGE_TTS_URL: http://edge-tts:5000
     depends_on:
       app:
         condition: service_started
@@ -140,6 +142,17 @@ services:
       - "3503:5000"
     volumes:
       - piper_models:/app/models
+    networks:
+      - callcrafter_network
+
+  edge-tts:
+    build:
+      context: ./edge-tts-server
+      dockerfile: Dockerfile
+    container_name: edge-tts
+    restart: unless-stopped
+    ports:
+      - "3504:5000"
     networks:
       - callcrafter_network
 

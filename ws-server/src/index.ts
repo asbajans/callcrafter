@@ -5,7 +5,6 @@ import { WebSocketServer } from 'ws';
 import { handleTwilioVoiceWebhook } from './twilio-webhook.js';
 import { handleWebSocketConnection } from './websocket.js';
 import { initMediaStream, getSessionsCount } from './media-stream.js';
-import { synthesizeEdgeTTS } from './edge-tts.js';
 import { handleZadarmaCall, endZadarmaCall, getZadarmaActiveCallCount } from './zadarma-handler.js';
 
 const HTTP_PORT = parseInt(process.env.WS_HTTP_PORT || '8080');
@@ -15,6 +14,7 @@ const WS_PORT = parseInt(process.env.WS_WS_PORT || '9090');
 initMediaStream({
   whisperServerUrl: process.env.WHISPER_SERVER_URL || 'http://localhost:3502',
   piperServerUrl: process.env.PIPER_TTS_URL || 'http://localhost:3503',
+  edgeTtsUrl: process.env.EDGE_TTS_URL || 'http://localhost:3504',
   appApiUrl: process.env.APP_API_URL || 'http://localhost:3000',
   internalApiKey: process.env.INTERNAL_API_KEY || '',
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
@@ -26,28 +26,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ws-server' }));
-
-// Edge TTS - HTTP endpoint for browser/admin panel
-app.get('/tts/edge', async (req, res) => {
-  const voice = req.query.voice as string || 'tr-TR-EmelNeural';
-  const text = req.query.text as string || '';
-  if (!text) {
-    return res.status(400).json({ error: 'text is required' });
-  }
-  try {
-    console.log(`Edge TTS request: voice=${voice}, text=${text.slice(0, 50)}...`);
-    const audioBuffer = await synthesizeEdgeTTS(text, voice);
-    console.log(`Edge TTS success: ${audioBuffer.length} bytes`);
-    res.set({
-      'Content-Type': 'audio/mpeg',
-      'Cache-Control': 'no-cache',
-    });
-    res.send(Buffer.from(audioBuffer));
-  } catch (err: any) {
-    console.error(`Edge TTS error: ${err.message}`);
-    res.status(500).json({ error: err.message || 'Edge TTS failed' });
-  }
-});
 
 // Twilio voice webhook - handles incoming calls
 app.post('/twilio/voice', handleTwilioVoiceWebhook);

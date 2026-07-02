@@ -48,6 +48,16 @@ jobs:
             asbajans/callcrafter-piper:latest
             asbajans/callcrafter-piper:${{ github.sha }}
 
+      - name: Build and push edge-tts-server
+        uses: docker/build-push-action@v6
+        with:
+          context: edge-tts-server
+          file: edge-tts-server/Dockerfile
+          push: true
+          tags: |
+            asbajans/callcrafter-edge-tts:latest
+            asbajans/callcrafter-edge-tts:${{ github.sha }}
+
       - name: Trigger Portainer redeploy (webhook)
         run: |
           for i in 1 2; do
