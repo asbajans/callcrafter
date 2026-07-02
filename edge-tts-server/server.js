@@ -11,15 +11,24 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'edge-tts' }
 app.get('/tts', async (req, res) => {
   const text = req.query.text || '';
   const voice = req.query.voice || 'tr-TR-EmelNeural';
+  const pitch = req.query.pitch || '0';
+  const rate = req.query.rate || '0';
 
   if (!text) {
     return res.status(400).json({ error: 'text query parameter is required' });
   }
 
   try {
-    console.log(`Edge TTS: voice=${voice}, text="${text.slice(0, 60)}..."`);
+    console.log(`Edge TTS: voice=${voice}, pitch=${pitch}Hz, rate=${rate}%, text="${text.slice(0, 60)}..."`);
 
-    await tts.synthesize(text, voice);
+    const pitchVal = parseInt(pitch);
+    const rateVal = parseInt(rate);
+
+    await tts.synthesize(text, voice, {
+      pitch: pitchVal ? `${pitchVal > 0 ? '+' : ''}${pitchVal}Hz` : '0Hz',
+      rate: rateVal ? `${rateVal > 0 ? '+' : ''}${rateVal}%` : '0%',
+    });
+
     const buffer = tts.toBuffer();
 
     console.log(`Edge TTS success: ${buffer.length} bytes`);

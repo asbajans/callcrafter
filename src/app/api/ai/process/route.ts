@@ -188,6 +188,8 @@ export async function POST(req: NextRequest) {
       response: result.content,
       voiceId: agent.voice || '',
       ttsProvider: agent.ttsProvider || 'auto',
+      pitch: typeof agent.pitch === 'number' ? agent.pitch : 0,
+      rate: typeof agent.rate === 'number' ? agent.rate : 0,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

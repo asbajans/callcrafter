@@ -154,9 +154,11 @@ async function synthesizeLocal(text: string, voiceId?: string): Promise<Buffer> 
   return Buffer.from(arrayBuffer);
 }
 
-async function synthesizeEdge(text: string, voiceId?: string): Promise<Buffer> {
+async function synthesizeEdge(text: string, voiceId?: string, pitch?: number, rate?: number): Promise<Buffer> {
   const voice = voiceId || 'tr-TR-EmelNeural';
-  const url = `${edgeTtsUrl}/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`;
+  const p = pitch || 0;
+  const r = rate || 0;
+  const url = `${edgeTtsUrl}/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}&pitch=${p}&rate=${r}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Edge TTS failed' }));
@@ -241,6 +243,8 @@ export async function processAudio(
     const aiResponse = data.response as string;
     const voiceId = data.voiceId as string | undefined;
     const ttsProvider = data.ttsProvider as string | undefined;
+    const pitch = typeof data.pitch === 'number' ? data.pitch : 0;
+    const rate = typeof data.rate === 'number' ? data.rate : 0;
 
     if (!aiResponse) {
       session.isAiSpeaking = false;
@@ -250,7 +254,7 @@ export async function processAudio(
     session.transcripts.push({ role: 'user', content: transcript });
     session.transcripts.push({ role: 'assistant', content: aiResponse });
 
-    await generateAndSendTTS(send, session, aiResponse, voiceId, ttsProvider);
+    await generateAndSendTTS(send, session, aiResponse, voiceId, ttsProvider, pitch, rate);
 
     return aiResponse;
   } catch (err) {
@@ -266,12 +270,14 @@ async function generateAndSendTTS(
   text: string,
   voiceId?: string,
   ttsProvider?: string,
+  pitch?: number,
+  rate?: number,
 ): Promise<void> {
   try {
     let mulawAudio: Buffer;
 
     if (ttsProvider === 'edge-tts') {
-      mulawAudio = await synthesizeEdge(text, voiceId);
+      mulawAudio = await synthesizeEdge(text, voiceId, pitch, rate);
     } else if (ttsProvider === 'piper') {
       mulawAudio = await synthesizeLocal(text, voiceId);
     } else if (ttsProvider === 'elevenlabs' && elevenLabsApiKey) {
@@ -281,7 +287,7 @@ async function generateAndSendTTS(
     } else {
       // auto fallback: edge-tts -> piper
       try {
-        mulawAudio = await synthesizeEdge(text, voiceId);
+        mulawAudio = await synthesizeEdge(text, voiceId, pitch, rate);
       } catch {
         mulawAudio = await synthesizeLocal(text, voiceId);
       }

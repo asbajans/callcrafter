@@ -69,6 +69,8 @@ const agentSchema = z.object({
   provider: z.number().optional(),
   model: z.string().optional(),
   ttsProvider: z.enum(['auto', 'edge-tts', 'elevenlabs', 'piper']).optional().default('auto'),
+  pitch: z.number().min(-100).max(100).optional().default(0),
+  rate: z.number().min(-50).max(50).optional().default(0),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
@@ -96,6 +98,8 @@ const defaultFormData: AgentFormData = {
   provider: undefined,
   model: undefined,
   ttsProvider: 'auto',
+  pitch: 0,
+  rate: 0,
 };
 
 function AgentFormModal({
@@ -469,6 +473,47 @@ function AgentFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">
+                  Ses Perdesi (Pitch): <span className="text-indigo-400">{form.pitch}Hz</span>
+                </label>
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  step="1"
+                  value={form.pitch}
+                  onChange={(e) => update('pitch', parseInt(e.target.value))}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.1] accent-indigo-500"
+                />
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>-100 (Kalın)</span>
+                  <span>0 (Normal)</span>
+                  <span>+100 (İnce)</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">
+                  Konuşma Hızı (Rate): <span className="text-indigo-400">{form.rate > 0 ? `+${form.rate}` : form.rate}%</span>
+                </label>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={form.rate}
+                  onChange={(e) => update('rate', parseInt(e.target.value))}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.1] accent-indigo-500"
+                />
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>-50 (Yavaş)</span>
+                  <span>0 (Normal)</span>
+                  <span>+50 (Hızlı)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">
                   Temperature: <span className="text-indigo-400">{form.temperature.toFixed(1)}</span>
                 </label>
                 <input
@@ -799,6 +844,8 @@ export default function AgentsPage() {
       provider: providerId || undefined,
       model: agent.model || undefined,
       ttsProvider: (agent.ttsProvider as 'auto' | 'edge-tts' | 'elevenlabs' | 'piper') || 'auto',
+      pitch: typeof (agent as any).pitch === 'number' ? (agent as any).pitch : 0,
+      rate: typeof (agent as any).rate === 'number' ? (agent as any).rate : 0,
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -825,9 +872,11 @@ export default function AgentsPage() {
         greetingMessage: data.greetingMessage,
         status: data.status.toLowerCase(),
         ...(data.provider ? { provider: data.provider } : {}),
-      ...(data.model ? { model: data.model } : {}),
-      ttsProvider: data.ttsProvider || 'auto',
-    };
+        ...(data.model ? { model: data.model } : {}),
+        ttsProvider: data.ttsProvider || 'auto',
+        pitch: data.pitch ?? 0,
+        rate: data.rate ?? 0,
+      };
       if (editingId) {
         await api.updateAgent(editingId, payload);
       } else {

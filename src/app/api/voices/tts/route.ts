@@ -49,7 +49,7 @@ async function elevenLabsTTS(voiceId: string, text: string, apiKey: string): Pro
   });
 }
 
-async function edgeTTSSynthesis(voiceId: string, text: string): Promise<NextResponse> {
+async function edgeTTSSynthesis(voiceId: string, text: string, pitch?: number, rate?: number): Promise<NextResponse> {
   const cleanText = text
     .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
     .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -63,7 +63,9 @@ async function edgeTTSSynthesis(voiceId: string, text: string): Promise<NextResp
   const effectiveVoice = (!voiceId || !isEdgeVoice) ? DEFAULT_EDGE_VOICE : voiceId;
 
   try {
-    const edgeUrl = `${EDGE_TTS_URL}/tts?voice=${encodeURIComponent(effectiveVoice)}&text=${encodeURIComponent(cleanText)}`;
+    const p = pitch || 0;
+    const r = rate || 0;
+    const edgeUrl = `${EDGE_TTS_URL}/tts?voice=${encodeURIComponent(effectiveVoice)}&text=${encodeURIComponent(cleanText)}&pitch=${p}&rate=${r}`;
     const res = await fetch(edgeUrl, { signal: AbortSignal.timeout(30000) });
 
     if (!res.ok) {
@@ -120,11 +122,13 @@ export async function GET(req: NextRequest) {
   const voiceId = req.nextUrl.searchParams.get('voice') || '';
   const text = req.nextUrl.searchParams.get('text') || '';
   const provider = req.nextUrl.searchParams.get('provider') || 'auto';
+  const pitch = parseInt(req.nextUrl.searchParams.get('pitch') || '0');
+  const rate = parseInt(req.nextUrl.searchParams.get('rate') || '0');
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
 
   try {
     if (provider === 'edge-tts') {
-      return await edgeTTSSynthesis(voiceId, text);
+      return await edgeTTSSynthesis(voiceId, text, pitch, rate);
     }
     if (provider === 'piper') {
       return await piperTTS(voiceId, text);
@@ -136,7 +140,7 @@ export async function GET(req: NextRequest) {
       return await elevenLabsTTS(voiceId, text, elevenLabsKey);
     }
     // auto: edge-tts -> piper -> elevenlabs
-    return await edgeTTSSynthesis(voiceId, text);
+    return await edgeTTSSynthesis(voiceId, text, pitch, rate);
   } catch (err: any) {
     console.error('TTS error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

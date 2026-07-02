@@ -38,6 +38,28 @@ export const Agents: CollectionConfig = {
       label: 'Voice Display Name',
     },
     {
+      name: 'pitch',
+      type: 'number',
+      min: -100,
+      max: 100,
+      defaultValue: 0,
+      label: 'Ses Perdesi (Pitch)',
+      admin: {
+        description: 'Ses perdesi ayarı (-100Hz ile +100Hz arası, 0 = normal)',
+      },
+    },
+    {
+      name: 'rate',
+      type: 'number',
+      min: -50,
+      max: 50,
+      defaultValue: 0,
+      label: 'Konuşma Hızı (Rate)',
+      admin: {
+        description: 'Konuşma hızı ayarı (-50% ile +50% arası, 0 = normal)',
+      },
+    },
+    {
       name: 'ttsProvider',
       type: 'select',
       defaultValue: 'auto',
