@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getPayload } from 'payload';
 import config from '../../../../../payload.config';
+import { CreditService } from '@/billing/CreditService';
+import { TRIAL_CREDITS, TRIAL_DAYS, DEFAULT_TRIAL_LIMITS } from '@/billing/types';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -44,6 +46,67 @@ export async function POST(request: Request) {
       id: user.id,
       data: { tenant: tenant.id },
     });
+
+    // Find Trial plan, fallback to Free
+    let trialPlan = await payload.find({
+      collection: 'pricing-plans',
+      where: { name: { equals: 'Trial' } },
+      limit: 1,
+    });
+    if (trialPlan.docs.length === 0) {
+      trialPlan = await payload.find({
+        collection: 'pricing-plans',
+        where: { name: { equals: 'Free' } },
+        limit: 1,
+      });
+    }
+    const planId = trialPlan.docs[0]?.id;
+
+    // Create trial subscription
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
+
+    if (planId) {
+      await payload.create({
+        collection: 'subscriptions',
+        data: {
+          tenant: tenant.id,
+          plan: planId,
+          status: 'trialing',
+          trialEnd: trialEnd.toISOString(),
+          currentPeriodStart: new Date().toISOString(),
+          currentPeriodEnd: trialEnd.toISOString(),
+        },
+      });
+    }
+
+    // Set tenant trial end date
+    await payload.update({
+      collection: 'tenants',
+      id: tenant.id,
+      data: { trialEndDate: trialEnd.toISOString() },
+    });
+
+    // Grant trial credits
+    const creditService = new CreditService();
+    await creditService.addCredits(tenant.id, TRIAL_CREDITS, 'system', {
+      description: `Trial credits (${TRIAL_DAYS} days)`,
+      expiresAt: trialEnd.toISOString(),
+    });
+
+    // Set monthly limit from trial defaults
+    const creditsRecord = await payload.find({
+      collection: 'tenant-credits' as any,
+      where: { tenant: { equals: tenant.id } },
+      limit: 1,
+    });
+    if (creditsRecord.docs[0]) {
+      await payload.update({
+        collection: 'tenant-credits' as any,
+        id: creditsRecord.docs[0].id,
+        data: { monthlyLimit: DEFAULT_TRIAL_LIMITS.monthlyAiCredits },
+      });
+    }
 
     return NextResponse.json(
       {

@@ -110,6 +110,7 @@ function AgentFormModal({
   voices,
   providers,
   loading,
+  planLimits,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,6 +119,7 @@ function AgentFormModal({
   voices: (Voice & { provider?: string })[];
   providers: AiProvider[];
   loading: boolean;
+  planLimits?: { allowedTtsProviders?: string[]; allowedAiModels?: string[]; allowedChannels?: string[] } | null;
 }) {
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
@@ -234,8 +236,15 @@ function AgentFormModal({
     await onSubmit(result.data);
   };
 
+  const allowedTts = planLimits?.allowedTtsProviders;
+  const allowedModels = planLimits?.allowedAiModels;
+  const allowedCh = planLimits?.allowedChannels;
+
   const selectedProvider = providers.find(p => p.id === form.provider);
-  const availableModels = selectedProvider?.models || [];
+  const rawModels = selectedProvider?.models || [];
+  const availableModels = allowedModels && allowedModels.length > 0
+    ? rawModels.filter((m: any) => allowedModels.includes(m.modelId || m))
+    : rawModels;
 
   const useElevenLabs = form.ttsProvider === 'elevenlabs';
   const useEdgeTTS = form.ttsProvider === 'edge-tts' || form.ttsProvider === 'auto';
@@ -244,6 +253,23 @@ function AgentFormModal({
     : voices.filter((v) => useEdgeTTS ? (v.provider === 'edge-tts') : (v.provider === 'piper'));
 
   const selectedVoiceName = availableVoices.find(v => v.id === form.voice)?.name || form.voice || '';
+
+  const filteredTtsOptions = ['auto', 'edge-tts', 'piper', 'elevenlabs'].filter(opt => {
+    if (!allowedTts || allowedTts.length === 0) return true;
+    if (opt === 'auto') return true;
+    return allowedTts.includes(opt);
+  });
+
+  const filteredProviders = providers.filter(p => p.isActive).filter(p => {
+    if (!allowedModels || allowedModels.length === 0) return true;
+    if (!p.models || p.models.length === 0) return true;
+    return p.models.some((m: any) => allowedModels.includes(m.modelId || m));
+  });
+
+  const filteredChannelOptions = CHANNEL_OPTIONS.filter(ch => {
+    if (!allowedCh || allowedCh.length === 0) return true;
+    return allowedCh.includes(ch.key);
+  });
 
   const toggleChannel = (channel: 'voice' | 'whatsapp' | 'instagram' | 'web') => {
     const current = form.channels;
@@ -554,7 +580,7 @@ function AgentFormModal({
                   <Select.Portal>
                     <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
                       <Select.Viewport>
-                        {providers.filter(p => p.isActive).map((p) => (
+                        {filteredProviders.map((p) => (
                           <Select.Item
                             key={p.id}
                             value={String(p.id)}
@@ -624,18 +650,20 @@ function AgentFormModal({
                 <Select.Portal>
                   <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
                     <Select.Viewport>
-                      <Select.Item value="auto" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>Otomatik (önce Edge TTS)</Select.ItemText>
-                      </Select.Item>
-                      <Select.Item value="edge-tts" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>Edge TTS (Microsoft, ucretsiz)</Select.ItemText>
-                      </Select.Item>
-                      <Select.Item value="piper" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>Piper (yerel, offline)</Select.ItemText>
-                      </Select.Item>
-                      <Select.Item value="elevenlabs" className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                        <Select.ItemText>ElevenLabs (ucretli)</Select.ItemText>
-                      </Select.Item>
+                      {filteredTtsOptions.map(opt => {
+                        const labels: Record<string, string> = {
+                          auto: 'Otomatik (önce Edge TTS)',
+                          'edge-tts': 'Edge TTS (Microsoft, ucretsiz)',
+                          piper: 'Piper (yerel, offline)',
+                          elevenlabs: 'ElevenLabs (ucretli)',
+                        };
+                        return (
+                          <Select.Item key={opt} value={opt}
+                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
+                            <Select.ItemText>{labels[opt] || opt}</Select.ItemText>
+                          </Select.Item>
+                        );
+                      })}
                     </Select.Viewport>
                   </Select.Content>
                 </Select.Portal>
@@ -645,7 +673,7 @@ function AgentFormModal({
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">{t('agent.channels')}</label>
               <div className="flex flex-wrap gap-2">
-                {CHANNEL_OPTIONS.map((ch) => {
+                {filteredChannelOptions.map((ch) => {
                   const Icon = ch.icon;
                   const selected = form.channels.includes(ch.key);
                   return (
@@ -769,6 +797,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [voices, setVoices] = useState<(Voice & { provider?: string })[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [planLimits, setPlanLimits] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -817,11 +846,22 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const fetchPlanLimits = useCallback(async () => {
+    try {
+      const res = await fetch('/api/billing/plan-limits');
+      if (res.ok) {
+        const data = await res.json();
+        setPlanLimits(data);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
     fetchProviders();
     fetchVoices();
-  }, [fetchAgents, fetchProviders]);
+    fetchPlanLimits();
+  }, [fetchAgents, fetchProviders, fetchPlanLimits]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -859,6 +899,16 @@ export default function AgentsPage() {
   const handleFormSubmit = async (data: AgentFormData) => {
     setSubmitting(true);
     try {
+      // Check max agent limit on create
+      if (!editingId && planLimits?.maxAgents > 0) {
+        const currentCount = agents.length;
+        if (currentCount >= planLimits.maxAgents) {
+          toast.error(`Plan limit: En fazla ${planLimits.maxAgents} asistan oluşturabilirsiniz. Paket yükseltmek için Faturalandırma sayfasını ziyaret edin.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const voiceName = data.voice;
       const payload = {
         name: data.name,
@@ -1077,6 +1127,7 @@ export default function AgentsPage() {
         voices={voices}
         providers={providers}
         loading={submitting}
+        planLimits={planLimits}
       />
 
       {testAgent && (

@@ -147,8 +147,14 @@ export const api = {
   getCreditPackages: () =>
     request<{ docs: any[] }>('/api/credit-packages'),
 
-  createCreditCheckout: (data: { packageId: number; tenantId?: number; successUrl: string; cancelUrl: string }) =>
+  createCreditCheckout: (data: { packageId: number; successUrl: string; cancelUrl: string }) =>
     request<{ url: string }>('/api/billing/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  subscribeToPlan: (data: { planId: number; successUrl: string; cancelUrl: string }) =>
+    request<{ url: string }>('/api/billing/subscribe', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

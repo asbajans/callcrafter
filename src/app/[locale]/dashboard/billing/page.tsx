@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CreditCard, Loader2, AlertCircle, Check, Zap,
-  Clock, Coins, Wallet, TrendingUp, ArrowUpRight,
+  Clock, Coins, Wallet, TrendingUp, ArrowUpRight, ExternalLink,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -17,6 +17,8 @@ export default function BillingPage() {
   const [myCredits, setMyCredits] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<number | null>(null);
+  const [subscribing, setSubscribing] = useState<number | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -47,7 +49,6 @@ export default function BillingPage() {
     try {
       const res = await api.createCreditCheckout({
         packageId: pkg.id,
-        tenantId: 0,
         successUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing?success=1`,
         cancelUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing`,
       });
@@ -58,6 +59,55 @@ export default function BillingPage() {
       setError(err.message || 'Failed to initiate purchase');
     } finally {
       setPurchasing(null);
+    }
+  }
+
+  async function subscribeToPlan(plan: any) {
+    setSubscribing(plan.id);
+    try {
+      const res = await fetch('/api/billing/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: plan.id,
+          successUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing?success=1`,
+          cancelUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing`,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to subscribe');
+      }
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to subscribe');
+    } finally {
+      setSubscribing(null);
+    }
+  }
+
+  async function openCustomerPortal() {
+    setPortalLoading(true);
+    try {
+      const res = await fetch('/api/billing/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          returnUrl: `${window.location.origin}/${window.location.pathname.split('/')[1]}/dashboard/billing`,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to open portal');
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to open billing portal');
+    } finally {
+      setPortalLoading(false);
     }
   }
 
@@ -98,9 +148,21 @@ export default function BillingPage() {
               <p className="text-indigo-200 text-sm font-medium">Current Plan</p>
               <h2 className="text-2xl font-bold mt-1">{currentPlan.name}</h2>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold">{formatCurrency(currentPlan.price)}</p>
-              <p className="text-indigo-200 text-sm">{currentPlan.billingCycle === 'yearly' ? '/year' : '/month'}</p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-3xl font-bold">{formatCurrency(currentPlan.price)}</p>
+                <p className="text-indigo-200 text-sm">{currentPlan.billingCycle === 'yearly' ? '/year' : '/month'}</p>
+              </div>
+              {currentSub?.stripeCustomerId && (
+                <button
+                  onClick={openCustomerPortal}
+                  disabled={portalLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                  Manage
+                </button>
+              )}
             </div>
           </div>
           {currentSub && (
@@ -272,14 +334,16 @@ export default function BillingPage() {
                     </ul>
                   )}
                   <button
-                    disabled={currentPlan?.id === plan.id}
-                    className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                    onClick={() => subscribeToPlan(plan)}
+                    disabled={currentPlan?.id === plan.id || subscribing === plan.id}
+                    className={`w-full py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                       currentPlan?.id === plan.id
                         ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                         : 'bg-indigo-500 text-white hover:bg-indigo-400'
                     }`}
                   >
-                    {currentPlan?.id === plan.id ? 'Current Plan' : 'Select Plan'}
+                    {subscribing === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {currentPlan?.id === plan.id ? 'Current Plan' : subscribing === plan.id ? 'Processing...' : 'Select Plan'}
                   </button>
                 </div>
               ))}

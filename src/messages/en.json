@@ -34,6 +34,7 @@
     "system": "System Settings",
     "dashboard": "Admin Dashboard",
     "tenants": "Tenants",
+    "pricingPlans": "Pricing Plans",
     "creditPackages": "Credit Packages",
     "aiProviders": "AI Providers",
     "usage": "Usage",

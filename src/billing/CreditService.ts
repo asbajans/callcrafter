@@ -1,5 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import type { PlanLimits } from './types'
 
 export interface CreditCheckResult {
   allowed: boolean
@@ -284,5 +285,42 @@ export class CreditService {
     }
 
     return { total, byService }
+  }
+
+  async syncPlanLimits(tenantId: number | string): Promise<void> {
+    const payload = await getPayload({ config })
+
+    const subs = await payload.find({
+      collection: 'subscriptions',
+      where: { tenant: { equals: tenantId } },
+      limit: 1,
+    })
+
+    if (!subs.docs[0]) return
+    const sub = subs.docs[0] as any
+    const planId = typeof sub.plan === 'object' ? sub.plan?.id : sub.plan
+    if (!planId) return
+
+    const plan = await payload.findByID({ collection: 'pricing-plans', id: planId })
+    if (!plan) return
+
+    const limits = (plan as any).limits as PlanLimits | null
+    if (!limits) return
+
+    if (limits.monthlyAiCredits > 0) {
+      const creditsRecord = await payload.find({
+        collection: 'tenant-credits' as any,
+        where: { tenant: { equals: tenantId } },
+        limit: 1,
+      })
+
+      if (creditsRecord.docs[0]) {
+        await payload.update({
+          collection: 'tenant-credits' as any,
+          id: creditsRecord.docs[0].id,
+          data: { monthlyLimit: limits.monthlyAiCredits },
+        })
+      }
+    }
   }
 }

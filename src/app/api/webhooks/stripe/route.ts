@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // Subscription plan checkout (existing behavior)
+        // Subscription plan checkout
         if (tenantId && planId) {
           const existing = await payload.find({
             collection: 'subscriptions',
@@ -107,6 +107,31 @@ export async function POST(req: NextRequest) {
             id: tenantId,
             data: { status: 'active' },
           });
+
+          // Sync plan limits to tenant-credits monthlyLimit
+          try {
+            const plan = await payload.findByID({ collection: 'pricing-plans', id: planId });
+            if (plan) {
+              const planData = plan as any;
+              const limits = planData.limits;
+              if (limits?.monthlyAiCredits > 0) {
+                const creditsRecord = await payload.find({
+                  collection: 'tenant-credits' as any,
+                  where: { tenant: { equals: tenantId } },
+                  limit: 1,
+                });
+                if (creditsRecord.docs[0]) {
+                  await payload.update({
+                    collection: 'tenant-credits' as any,
+                    id: creditsRecord.docs[0].id,
+                    data: { monthlyLimit: limits.monthlyAiCredits },
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            billingLogger.error('Failed to sync plan limits', e instanceof Error ? e : undefined);
+          }
 
           billingLogger.info('Subscription activated for tenant', { tenantId, planId });
         }
@@ -153,6 +178,36 @@ export async function POST(req: NextRequest) {
             id: tenantId,
             data: { status: tenantStatus as 'active' | 'suspended' | 'inactive' },
           });
+
+          // Sync plan limits when subscription is updated (e.g. plan change)
+          if (subscription.status === 'active' || subscription.status === 'trialing') {
+            try {
+              const subData = sub as any;
+              if (subData.plan) {
+                const planId = typeof subData.plan === 'object' ? subData.plan.id : subData.plan;
+                const plan = await payload.findByID({ collection: 'pricing-plans', id: planId });
+                if (plan) {
+                  const limits = (plan as any).limits;
+                  if (limits?.monthlyAiCredits > 0) {
+                    const creditsRecord = await payload.find({
+                      collection: 'tenant-credits' as any,
+                      where: { tenant: { equals: tenantId } },
+                      limit: 1,
+                    });
+                    if (creditsRecord.docs[0]) {
+                      await payload.update({
+                        collection: 'tenant-credits' as any,
+                        id: creditsRecord.docs[0].id,
+                        data: { monthlyLimit: limits.monthlyAiCredits },
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              billingLogger.error('Failed to sync plan limits on update', e instanceof Error ? e : undefined);
+            }
+          }
         }
         break;
       }

@@ -10,6 +10,7 @@ const navItems = [
   { href: 'users', labelKey: 'users', icon: 'Users' },
   { href: 'agents', labelKey: 'agents', icon: 'Bot' },
   { href: 'tenants', labelKey: 'tenants', icon: 'Building2' },
+  { href: 'pricing-plans', labelKey: 'pricingPlans', icon: 'Coins' },
   { href: 'credit-packages', labelKey: 'creditPackages', icon: 'Package' },
   { href: 'ai-providers', labelKey: 'aiProviders', icon: 'Cpu' },
   { href: 'usage', labelKey: 'usage', icon: 'Activity' },
@@ -53,6 +54,11 @@ const iconMap: Record<string, React.ReactNode> = {
   Package: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 10.5h.375c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125H21M4.5 10.5H18V7.5c0-1.243-.943-2.25-2.11-2.25H6.61C5.443 5.25 4.5 6.257 4.5 7.5v3zm0 0v7.5c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-1.5M4.5 13.5h18" />
+    </svg>
+  ),
+  Coins: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
     </svg>
   ),
   Cpu: (
