@@ -95,8 +95,28 @@ export async function POST(req: NextRequest) {
     }
 
     // Paid plan - need Stripe checkout
-    if (!planData.stripePriceId) {
-      return NextResponse.json({ error: 'Plan has no Stripe price configured' }, { status: 400 })
+    let stripePriceId = planData.stripePriceId
+    let stripeProductId = planData.stripeProductId
+
+    // Auto-create Stripe product/price if missing (e.g. plan created before hook)
+    if (!stripePriceId) {
+      const stripeService = new StripeService(stripeSecretKey)
+      const interval = planData.billingCycle === 'yearly' ? 'year' as const : planData.billingCycle === 'monthly' ? 'month' as const : undefined
+      const { product, price } = await stripeService.createProduct(
+        planData.name,
+        planData.description || '',
+        planData.price,
+        interval,
+      )
+      stripePriceId = price.id
+      stripeProductId = product.id
+
+      // Save IDs to the plan
+      await payload.update({
+        collection: 'pricing-plans' as any,
+        id: planId,
+        data: { stripePriceId, stripeProductId },
+      })
     }
 
     const stripeService = new StripeService(stripeSecretKey)
@@ -122,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     const session = await stripeService.createCheckoutSession({
       customerId: stripeCustomerId,
-      priceId: planData.stripePriceId,
+      priceId: stripePriceId,
       successUrl,
       cancelUrl,
       metadata: {
