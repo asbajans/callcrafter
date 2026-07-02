@@ -31,7 +31,7 @@ async function syncStripeProduct(data: any, originalDoc?: any) {
 
     const { product, price: stripePrice } = await stripeService.createProduct(
       name || '',
-      description || '',
+      description || undefined,
       price,
       interval,
     )

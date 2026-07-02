@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       const interval = planData.billingCycle === 'yearly' ? 'year' as const : planData.billingCycle === 'monthly' ? 'month' as const : undefined
       const { product, price } = await stripeService.createProduct(
         planData.name,
-        planData.description || '',
+        planData.description || undefined,
         planData.price,
         interval,
       )

@@ -36,14 +36,13 @@ export class StripeService {
 
   async createProduct(
     name: string,
-    description: string,
+    description: string | undefined,
     amount: number,
     interval?: 'month' | 'year'
   ): Promise<{ product: Stripe.Product; price: Stripe.Price }> {
-    const product = await this.stripe.products.create({
-      name,
-      description,
-    });
+    const productData: Stripe.ProductCreateParams = { name }
+    if (description) productData.description = description
+    const product = await this.stripe.products.create(productData);
 
     const price = await this.stripe.prices.create({
       product: product.id,
