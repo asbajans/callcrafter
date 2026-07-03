@@ -43,6 +43,9 @@ export default function AgentTestModal({
   const silenceStartRef = useRef(0)
   const listeningRef = useRef(false)
   const vadIntervalRef = useRef<any>(null)
+  const inCallRef = useRef(false)
+  const sendMessageRef = useRef<((text: string) => Promise<string | null>) | null>(null)
+  const processSpeechChunksRef = useRef<((chunks: Blob[]) => Promise<void>) | null>(null)
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' })
@@ -63,9 +66,13 @@ export default function AgentTestModal({
     if (audioContextRef.current) audioContextRef.current.close()
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
     setInCall(false)
+    inCallRef.current = false
     setStatusText('')
     listeningRef.current = false
   }
+
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || sending) return
@@ -96,6 +103,8 @@ export default function AgentTestModal({
     }
   }, [agent.id, messages, sending])
 
+  sendMessageRef.current = sendMessage
+
   const speakViaTTS = (text: string): Promise<void> => {
     return new Promise((resolve) => {
       const voiceId = agent.voice || 'tr_TR-dfki-medium'
@@ -121,7 +130,7 @@ export default function AgentTestModal({
         .catch((err) => {
           console.error('TTS playback error:', err)
           setStatusText('Seslendirme hatası')
-          setTimeout(() => { if (inCall) { setStatusText('Dinliyor...'); listeningRef.current = true } }, 1500)
+          setTimeout(() => { if (inCallRef.current) { setStatusText('Dinliyor...'); listeningRef.current = true } }, 1500)
           resolve()
         })
     })
@@ -165,7 +174,7 @@ export default function AgentTestModal({
           const chunks = [...speechBufferRef.current]
           speechBufferRef.current = []
           if (chunks.length > 0) {
-            processSpeechChunks(chunks)
+            processSpeechChunksRef.current!(chunks)
           }
         }
       }
@@ -226,6 +235,8 @@ export default function AgentTestModal({
     }
   }
 
+  processSpeechChunksRef.current = processSpeechChunks
+
   const startCall = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -249,16 +260,17 @@ export default function AgentTestModal({
       mediaRecorderRef.current = mediaRecorder
 
       setInCall(true)
+      inCallRef.current = true
       setMessages([])
       listeningRef.current = true
       setStatusText('Dinliyor...')
 
       startVAD()
 
-      const greeting = await sendMessage('Merhaba')
-      if (greeting && !sending) {
+      const greeting = await sendMessageRef.current!('Merhaba')
+      if (greeting) {
         await speakViaTTS(greeting)
-        if (inCall) {
+        if (inCallRef.current) {
           setStatusText('Dinliyor...')
           listeningRef.current = true
         }
