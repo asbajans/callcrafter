@@ -140,8 +140,8 @@ export default function AgentTestModal({
     const analyser = analyserRef.current!
     const bufferLength = analyser.frequencyBinCount
     const dataArray = new Uint8Array(bufferLength)
-    const SILENCE_THRESHOLD = 30
-    const SILENCE_TIMEOUT = 1500
+    const SILENCE_THRESHOLD = 45
+    const SILENCE_TIMEOUT = 3000
 
     isSpeakingRef.current = false
     silenceStartRef.current = 0
