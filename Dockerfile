@@ -28,6 +28,7 @@ RUN npm install --legacy-peer-deps --omit=dev && rm -f package-lock.json
 COPY --from=builder /app/tsconfig.json /app/tsconfig.json
 COPY --from=builder /app/payload.config.ts /app/payload.config.ts
 COPY --from=builder /app/src/payload /app/src/payload
+COPY --from=builder /app/src/billing /app/src/billing
 COPY --from=builder /app/src/migrations /app/src/migrations
 COPY scripts/start.sh /app/start.sh
 

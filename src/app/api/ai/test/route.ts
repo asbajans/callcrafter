@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ response: result })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('/api/ai/test error:', error)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
