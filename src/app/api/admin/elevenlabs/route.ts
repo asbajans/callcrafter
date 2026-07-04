@@ -56,85 +56,89 @@ async function getElevenLabsService(): Promise<ElevenLabsService | null> {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user || !['admin', 'super-admin'].includes(user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { searchParams } = new URL(req.url)
-  const action = searchParams.get('action') || 'agents'
-  const el = await getElevenLabsService()
-
-  if (action === 'voices') {
-    if (!el) return NextResponse.json({ voices: [] })
-    try {
-      const data = await el.listVoices()
-      return NextResponse.json({ voices: data.voices || [] })
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message, voices: [] })
+  try {
+    const user = await getCurrentUser()
+    if (!user || !['admin', 'super-admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-  }
 
-  if (action === 'phone-numbers') {
-    if (!el) return NextResponse.json({ phoneNumbers: [] })
-    try {
-      const data = await el.listAgents()
-      return NextResponse.json({ phoneNumbers: data.phone_numbers || [] })
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message, phoneNumbers: [] })
-    }
-  }
+    const { searchParams } = new URL(req.url)
+    const action = searchParams.get('action') || 'agents'
+    const el = await getElevenLabsService()
 
-  if (action === 'elevenlabs-agents') {
-    if (!el) return NextResponse.json({ elevenlabsAgents: [] })
-    try {
-      const data = await el.listAgents()
-      return NextResponse.json({ elevenlabsAgents: data.agents || [] })
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message, elevenlabsAgents: [] })
-    }
-  }
-
-  // Default: return agents with ElevenLabs status
-  const payload = await getPayload({ config })
-  const agentsRes = await payload.find({
-    collection: 'agents',
-    limit: 100,
-    sort: '-createdAt',
-    depth: 0,
-  })
-
-  let elevenlabsAgentMap: Record<string, any> = {}
-  if (el) {
-    try {
-      const data = await el.listAgents()
-      if (data.agents) {
-        for (const agent of data.agents) {
-          elevenlabsAgentMap[agent.agent_id] = agent
-        }
+    if (action === 'voices') {
+      if (!el) return NextResponse.json({ voices: [] })
+      try {
+        const data = await el.listVoices()
+        return NextResponse.json({ voices: data.voices || [] })
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message, voices: [] })
       }
-    } catch {}
-  }
-
-  const agents = (agentsRes.docs || []).map((a: any) => {
-    const elId = a.elevenlabsAgentId || null
-    const elAgent = elId ? elevenlabsAgentMap[elId] : null
-    return {
-      id: a.id,
-      name: a.name,
-      language: a.language,
-      voiceEngine: a.voiceEngine || 'natural-tr-female',
-      voiceEngineLabel: VOICE_ENGINE_LABELS[a.voiceEngine] || a.voiceEngine || 'Doğal Türkçe Kadın',
-      elevenlabsAgentId: elId,
-      elevenlabsAgentName: elAgent?.name || null,
-      elevenlabsVoice: a.elevenlabsVoice || null,
-      elevenlabsPhoneNumberId: a.elevenlabsPhoneNumberId || null,
-      status: a.status,
-      createdAt: a.createdAt,
     }
-  })
 
-  return NextResponse.json({ agents })
+    if (action === 'phone-numbers') {
+      if (!el) return NextResponse.json({ phoneNumbers: [] })
+      try {
+        const data = await el.listAgents()
+        return NextResponse.json({ phoneNumbers: data.phone_numbers || [] })
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message, phoneNumbers: [] })
+      }
+    }
+
+    if (action === 'elevenlabs-agents') {
+      if (!el) return NextResponse.json({ elevenlabsAgents: [] })
+      try {
+        const data = await el.listAgents()
+        return NextResponse.json({ elevenlabsAgents: data.agents || [] })
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message, elevenlabsAgents: [] })
+      }
+    }
+
+    // Default: return agents with ElevenLabs status
+    const payload = await getPayload({ config })
+    const agentsRes = await payload.find({
+      collection: 'agents',
+      limit: 100,
+      sort: '-createdAt',
+      depth: 0,
+    })
+
+    let elevenlabsAgentMap: Record<string, any> = {}
+    if (el) {
+      try {
+        const data = await el.listAgents()
+        if (data.agents) {
+          for (const agent of data.agents) {
+            elevenlabsAgentMap[agent.agent_id] = agent
+          }
+        }
+      } catch {}
+    }
+
+    const agents = (agentsRes.docs || []).map((a: any) => {
+      const elId = a.elevenlabsAgentId || null
+      const elAgent = elId ? elevenlabsAgentMap[elId] : null
+      return {
+        id: a.id,
+        name: a.name,
+        language: a.language,
+        voiceEngine: a.voiceEngine || 'natural-tr-female',
+        voiceEngineLabel: VOICE_ENGINE_LABELS[a.voiceEngine] || a.voiceEngine || 'Doğal Türkçe Kadın',
+        elevenlabsAgentId: elId,
+        elevenlabsAgentName: elAgent?.name || null,
+        elevenlabsVoice: a.elevenlabsVoice || null,
+        elevenlabsPhoneNumberId: a.elevenlabsPhoneNumberId || null,
+        status: a.status,
+        createdAt: a.createdAt,
+      }
+    })
+
+    return NextResponse.json({ agents })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {
