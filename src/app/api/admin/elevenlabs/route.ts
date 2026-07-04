@@ -24,6 +24,11 @@ async function getCurrentUser() {
 }
 
 async function getElevenLabsService(): Promise<ElevenLabsService | null> {
+  // First try env var
+  const envKey = process.env.ELEVENLABS_API_KEY
+  if (envKey) return new ElevenLabsService(envKey)
+
+  // Fallback: look up from AiProviders collection
   try {
     const payload = await getPayload({ config })
     const providers = await payload.find({
@@ -34,7 +39,6 @@ async function getElevenLabsService(): Promise<ElevenLabsService | null> {
     })
     let provider = providers.docs[0] as any
     if (!provider?.apiKey) {
-      // Fallback: try to find any provider with elevenlabs-related API key pattern
       const all = await payload.find({
         collection: 'ai-providers' as any,
         limit: 50,
