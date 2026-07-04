@@ -32,14 +32,20 @@ export async function GET() {
       })
       if (res.ok) {
         const data = await res.json()
-        elevenLabsVoices = (data.voices || []).map((v: any) => ({
-          id: v.voice_id,
-          name: v.name,
-          language: null,
-          gender: null,
-          previewUrl: v.preview_url || null,
-          provider: 'elevenlabs' as const,
-        }))
+        elevenLabsVoices = (data.voices || []).map((v: any) => {
+          const labels = v.labels || {}
+          return {
+            id: v.voice_id,
+            name: v.name,
+            language: labels.language || labels.accent || null,
+            gender: labels.gender || null,
+            description: labels.description || null,
+            previewUrl: v.preview_url || null,
+            provider: 'elevenlabs' as const,
+            isPremade: v.category === 'premade',
+            category: v.category || null,
+          }
+        })
         hasElevenLabs = elevenLabsVoices.length > 0
       }
     } catch {}

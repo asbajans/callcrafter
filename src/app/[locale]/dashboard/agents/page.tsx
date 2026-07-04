@@ -107,6 +107,7 @@ function AgentFormModal({
   providers,
   loading,
   planLimits,
+  elevenlabsVoices = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -115,6 +116,7 @@ function AgentFormModal({
   providers: AiProvider[];
   loading: boolean;
   planLimits?: { allowedTtsProviders?: string[]; allowedAiModels?: string[]; allowedChannels?: string[] } | null;
+  elevenlabsVoices?: { id: string; name: string; language?: string | null }[];
 }) {
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
@@ -171,7 +173,10 @@ function AgentFormModal({
     return p.models.some((m: any) => allowedModels.includes(m.modelId || m));
   });
 
-  const selectedVoiceTemplate = VOICE_ENGINES.find(v => v.value === form.voiceTemplate);
+  const voiceOptions = elevenlabsVoices.length > 0
+    ? elevenlabsVoices.map(v => ({ value: v.id, label: v.name }))
+    : [...VOICE_ENGINES]
+  const selectedVoiceTemplate = voiceOptions.find(v => v.value === form.voiceTemplate);
 
   const filteredChannelOptions = CHANNEL_OPTIONS.filter(ch => {
     if (!allowedCh || allowedCh.length === 0) return true;
@@ -285,37 +290,43 @@ function AgentFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Ses Şablonu</label>
-                <Select.Root
-                  value={form.voiceTemplate || 'natural-tr-female'}
-                  onValueChange={(v) => update('voiceTemplate', v)}
-                >
-                  <Select.Trigger
-                    className={cn(
-                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                      'border-white/[0.1] bg-white/[0.06]'
-                    )}
+                {voiceOptions.length === 0 ? (
+                  <div className="px-3.5 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-400">
+                    Ses verisi alınamadı. API anahtarını kontrol edin.
+                  </div>
+                ) : (
+                  <Select.Root
+                    value={form.voiceTemplate || voiceOptions[0].value}
+                    onValueChange={(v) => update('voiceTemplate', v)}
                   >
-                    <Select.Value />
-                    <Select.Icon>
-                      <ChevronDown className="w-4 h-4 text-slate-500" />
-                    </Select.Icon>
-                  </Select.Trigger>
-                  <Select.Portal>
-                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                      <Select.Viewport>
-                        {VOICE_ENGINES.map((ve) => (
-                          <Select.Item
-                            key={ve.value}
-                            value={ve.value}
-                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
-                          >
-                            <Select.ItemText>{ve.label}</Select.ItemText>
-                          </Select.Item>
-                        ))}
-                      </Select.Viewport>
-                    </Select.Content>
-                  </Select.Portal>
-                </Select.Root>
+                    <Select.Trigger
+                      className={cn(
+                        'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                        'border-white/[0.1] bg-white/[0.06]'
+                      )}
+                    >
+                      <Select.Value />
+                      <Select.Icon>
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                      <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                        <Select.Viewport>
+                          {voiceOptions.map((ve) => (
+                            <Select.Item
+                              key={ve.value}
+                              value={ve.value}
+                              className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                            >
+                              <Select.ItemText>{ve.label}</Select.ItemText>
+                            </Select.Item>
+                          ))}
+                        </Select.Viewport>
+                      </Select.Content>
+                    </Select.Portal>
+                  </Select.Root>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -566,12 +577,21 @@ function DeleteConfirmDialog({
   );
 }
 
+function getVoiceLabel(voiceTemplate: string | null | undefined, voices: { id: string; name: string }[]): string | null {
+  if (!voiceTemplate) return null
+  const found = voices.find(v => v.id === voiceTemplate)
+  if (found) return found.name
+  const hardcoded = VOICE_ENGINES.find(v => v.value === voiceTemplate)
+  return hardcoded?.label || null
+}
+
 export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [planLimits, setPlanLimits] = useState<any>(null);
+  const [elevenlabsVoices, setElevenlabsVoices] = useState<{ id: string; name: string; language?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -617,11 +637,23 @@ export default function AgentsPage() {
     } catch { /* non-critical */ }
   }, []);
 
+  const fetchVoices = useCallback(async () => {
+    try {
+      const res = await fetch('/api/voices/list');
+      if (res.ok) {
+        const data = await res.json();
+        const elevenlabs = (data.voices || []).filter((v: any) => v.provider === 'elevenlabs')
+        setElevenlabsVoices(elevenlabs);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
     fetchProviders();
     fetchPlanLimits();
-  }, [fetchAgents, fetchProviders, fetchPlanLimits]);
+    fetchVoices();
+  }, [fetchAgents, fetchProviders, fetchPlanLimits, fetchVoices]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -807,7 +839,7 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
-                      <span>{VOICE_ENGINES.find(v => v.value === agent.voiceTemplate)?.label || agent.voiceTemplate || '—'}</span>
+                      <span>{getVoiceLabel(agent.voiceTemplate, elevenlabsVoices) || agent.voiceTemplate || '—'}</span>
                     </td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
                       <span className="text-xs font-medium text-slate-400 bg-white/[0.06] px-2 py-1 rounded-lg">{agent.language}</span>
@@ -874,6 +906,7 @@ export default function AgentsPage() {
         providers={providers}
         loading={submitting}
         planLimits={planLimits}
+        elevenlabsVoices={elevenlabsVoices}
       />
 
       {testAgent && (

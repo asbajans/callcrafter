@@ -142,105 +142,87 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user || !['admin', 'super-admin'].includes(user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const body = await req.json()
-  const { action, agentId, elevenlabsVoiceId } = body
-  const webhookUrl = process.env.NEXT_PUBLIC_APP_URL
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/elevenlabs`
-    : `https://callcrafter.com.tr/api/webhooks/elevenlabs`
-
-  const el = await getElevenLabsService()
-  if (!el) {
-    return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı. AiProviders koleksiyonunda ElevenLabs kaydını kontrol edin.' }, { status: 400 })
-  }
-
-  const payload = await getPayload({ config })
-
-  if (action === 'sync') {
-    const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 })
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent bulunamadı' }, { status: 404 })
+  try {
+    const user = await getCurrentUser()
+    if (!user || !['admin', 'super-admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const a = agent as any
-    const voiceId = elevenlabsVoiceId || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
-    const firstMsg = a.greetingMessage || 'Merhaba, size nasıl yardımcı olabilirim?'
-    const lang = (a.language || 'tr').toLowerCase()
-    const prompt = a.systemPrompt || 'Sen yardımsever bir AI asistanısın.'
+    const body = await req.json()
+    const { action, agentId, elevenlabsVoiceId } = body
+    const webhookUrl = process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/elevenlabs`
+      : `https://callcrafter.com.tr/api/webhooks/elevenlabs`
 
-    if (a.elevenlabsAgentId) {
-      // Update existing agent
-      await el.updateAgent(a.elevenlabsAgentId, {
-        name: a.name,
-        conversation_config: {
-          agent: {
-            prompt,
-            first_message: firstMsg,
-            language: lang,
-          },
-          tts: {
-            voice_id: voiceId,
-            model_id: a.elevenlabsModel || 'eleven_multilingual_v2',
-          },
-          turn: {
-            turn_timeout: a.elevenlabsTurnTimeout || 10,
-          },
-          webhook: { url: webhookUrl },
-        },
-      })
-
-      await payload.update({
-        collection: 'agents',
-        id: agentId,
-        data: {
-          elevenlabsVoice: voiceId,
-          elevenlabsLanguage: lang,
-        } as any,
-      })
-
-      return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId })
-    } else {
-      // Create new agent on ElevenLabs
-      const result = await el.createAgent({
-        name: a.name,
-        conversation_config: {
-          agent: {
-            prompt,
-            first_message: firstMsg,
-            language: lang,
-          },
-          tts: {
-            voice_id: voiceId,
-            model_id: a.elevenlabsModel || 'eleven_multilingual_v2',
-          },
-          turn: {
-            turn_timeout: a.elevenlabsTurnTimeout || 10,
-          },
-          webhook: { url: webhookUrl },
-        },
-      })
-
-      const newAgentId = result.agent_id
-      await payload.update({
-        collection: 'agents',
-        id: agentId,
-        data: {
-          elevenlabsAgentId: newAgentId,
-          elevenlabsVoice: voiceId,
-          elevenlabsLanguage: lang,
-          voiceEngine: 'elevenlabs',
-        } as any,
-      })
-
-      return NextResponse.json({ success: true, action: 'created', agentId: newAgentId })
+    const el = await getElevenLabsService()
+    if (!el) {
+      return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı. AiProviders koleksiyonunda ElevenLabs kaydını kontrol edin.' }, { status: 400 })
     }
-  }
 
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+    const payload = await getPayload({ config })
+
+    if (action === 'sync') {
+      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 })
+      if (!agent) {
+        return NextResponse.json({ error: 'Agent bulunamadı' }, { status: 404 })
+      }
+
+      const a = agent as any
+      const voiceId = elevenlabsVoiceId || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
+      const firstMsg = a.greetingMessage || 'Merhaba, size nasıl yardımcı olabilirim?'
+      const lang = (a.language || 'tr').toLowerCase()
+      const prompt = a.systemPrompt || 'Sen yardımsever bir AI asistanısın.'
+
+      try {
+        if (a.elevenlabsAgentId) {
+          await el.updateAgent(a.elevenlabsAgentId, {
+            name: a.name,
+            conversation_config: {
+              agent: { prompt, first_message: firstMsg, language: lang },
+              tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
+              turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
+              webhook: { url: webhookUrl },
+            },
+          })
+
+          await payload.update({
+            collection: 'agents', id: agentId,
+            data: { elevenlabsVoice: voiceId, elevenlabsLanguage: lang } as any,
+          })
+
+          return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId })
+        } else {
+          const result = await el.createAgent({
+            name: a.name,
+            conversation_config: {
+              agent: { prompt, first_message: firstMsg, language: lang },
+              tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
+              turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
+              webhook: { url: webhookUrl },
+            },
+          })
+
+          await payload.update({
+            collection: 'agents', id: agentId,
+            data: {
+              elevenlabsAgentId: result.agent_id, elevenlabsVoice: voiceId,
+              elevenlabsLanguage: lang, voiceEngine: 'elevenlabs',
+            } as any,
+          })
+
+          return NextResponse.json({ success: true, action: 'created', agentId: result.agent_id })
+        }
+      } catch (err: any) {
+        return NextResponse.json({
+          error: `ElevenLabs API hatası: ${err.message}`,
+        }, { status: 502 })
+      }
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+  }
 }
 
 export async function DELETE(req: NextRequest) {
