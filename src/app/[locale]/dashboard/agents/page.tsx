@@ -39,7 +39,7 @@ type Agent = {
   status: string;
   model?: string | null;
   provider?: number | { id: number } | null;
-  voiceEngine?: string | null;
+  voiceTemplate?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -70,7 +70,7 @@ const agentSchema = z.object({
   status: z.enum(['Active', 'Inactive', 'Testing']),
   provider: z.number().optional(),
   model: z.string().optional(),
-  voiceEngine: z.string().optional().default('natural-tr-female'),
+  voiceTemplate: z.string().optional().default('natural-tr-female'),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
@@ -96,7 +96,7 @@ const defaultFormData: AgentFormData = {
   status: 'Active',
   provider: undefined,
   model: undefined,
-  voiceEngine: 'natural-tr-female',
+  voiceTemplate: 'natural-tr-female',
 };
 
 function AgentFormModal({
@@ -171,7 +171,7 @@ function AgentFormModal({
     return p.models.some((m: any) => allowedModels.includes(m.modelId || m));
   });
 
-  const selectedVoiceEngine = VOICE_ENGINES.find(v => v.value === form.voiceEngine);
+  const selectedVoiceTemplate = VOICE_ENGINES.find(v => v.value === form.voiceTemplate);
 
   const filteredChannelOptions = CHANNEL_OPTIONS.filter(ch => {
     if (!allowedCh || allowedCh.length === 0) return true;
@@ -286,8 +286,8 @@ function AgentFormModal({
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-300">Ses Şablonu</label>
                 <Select.Root
-                  value={form.voiceEngine || 'natural-tr-female'}
-                  onValueChange={(v) => update('voiceEngine', v)}
+                  value={form.voiceTemplate || 'natural-tr-female'}
+                  onValueChange={(v) => update('voiceTemplate', v)}
                 >
                   <Select.Trigger
                     className={cn(
@@ -530,7 +530,7 @@ function DeleteConfirmDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-in fade-in duration-200" />
-        <Dialog.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-slate-900 rounded-2xl shadow-2xl border border-white/[0.1] p-6 animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-slate-900 rounded-2xl shadow-2xl border border-white/[0.1] p-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center gap-4 mb-5">
             <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0">
               <Trash2 className="w-6 h-6 text-red-400" />
@@ -583,7 +583,7 @@ export default function AgentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voiceEngine?: string | null } | null>(null);
+  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voiceTemplate?: string | null } | null>(null);
   const [testDefaultTab, setTestDefaultTab] = useState<'text' | 'voice'>('text');
 
   const fetchAgents = useCallback(async () => {
@@ -642,7 +642,7 @@ export default function AgentsPage() {
       status: agent.status as AgentFormData['status'],
       provider: providerId || undefined,
       model: agent.model || undefined,
-      voiceEngine: agent.voiceEngine || 'natural-tr-female',
+      voiceTemplate: agent.voiceTemplate || 'natural-tr-female',
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -677,7 +677,7 @@ export default function AgentsPage() {
         status: data.status.toLowerCase(),
         ...(data.provider ? { provider: data.provider } : {}),
         ...(data.model ? { model: data.model } : {}),
-        voiceEngine: data.voiceEngine || 'natural-tr-female',
+        voiceTemplate: data.voiceTemplate || 'natural-tr-female',
       };
       if (editingId) {
         await api.updateAgent(editingId, payload);
@@ -807,7 +807,7 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
-                      <span>{VOICE_ENGINES.find(v => v.value === agent.voiceEngine)?.label || agent.voiceEngine || '—'}</span>
+                      <span>{VOICE_ENGINES.find(v => v.value === agent.voiceTemplate)?.label || agent.voiceTemplate || '—'}</span>
                     </td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
                       <span className="text-xs font-medium text-slate-400 bg-white/[0.06] px-2 py-1 rounded-lg">{agent.language}</span>
@@ -831,14 +831,14 @@ export default function AgentsPage() {
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voiceEngine: agent.voiceEngine }); }}
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voiceTemplate: agent.voiceTemplate }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
                           title="Yazılı Test"
                         >
                           <MessageSquare className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voiceEngine: agent.voiceEngine }); }}
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voiceTemplate: agent.voiceTemplate }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                           title="Sesli Test"
                         >

@@ -43,6 +43,7 @@ export default function AdminElevenLabsPage() {
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [voicesError, setVoicesError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<number | null>(null);
   const [syncModal, setSyncModal] = useState<{ agent: AgentSyncStatus; voices: ElevenLabsVoice[] } | null>(null);
   const [selectedVoice, setSelectedVoice] = useState('');
@@ -61,6 +62,13 @@ export default function AdminElevenLabsPage() {
       const voicesData = voicesRes.ok ? await voicesRes.json() : { voices: [] };
       setAgents(agentsData.agents || []);
       setVoices(voicesData.voices || []);
+      if (voicesData.error) {
+        setVoicesError(voicesData.error);
+      } else if (voicesData.voices?.length === 0) {
+        setVoicesError('ElevenLabs ses listesi alınamadı. API anahtarı eksik veya geçersiz olabilir.');
+      } else {
+        setVoicesError(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -293,23 +301,31 @@ export default function AdminElevenLabsPage() {
 
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">ElevenLabs Sesi</label>
-                <select
-                  value={selectedVoice}
-                  onChange={(e) => setSelectedVoice(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-                >
-                  <option value="">Ses seçin</option>
-                  {syncModal.voices.map((v) => (
-                    <option key={v.voice_id} value={v.voice_id}>
-                      {v.name} ({v.voice_id.slice(0, 8)}...)
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">
-                  {syncModal.agent.language?.toLowerCase() === 'tr'
-                    ? 'Türkçe için Türkçe destekli ses seçmeniz önerilir.'
-                    : 'English için İngilizce ses seçmeniz önerilir.'}
-                </p>
+                {syncModal.voices.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-700">
+                    {voicesError || 'Ses listesi alınamadı. ElevenLabs API anahtarınızı kontrol edin.'}
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={selectedVoice}
+                      onChange={(e) => setSelectedVoice(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    >
+                      <option value="">Ses seçin</option>
+                      {syncModal.voices.map((v) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.name} ({v.voice_id.slice(0, 8)}...)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {syncModal.agent.language?.toLowerCase() === 'tr'
+                        ? 'Türkçe için Türkçe destekli ses seçmeniz önerilir.'
+                        : 'English için İngilizce ses seçmeniz önerilir.'}
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">

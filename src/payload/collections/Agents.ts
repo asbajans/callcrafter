@@ -37,6 +37,11 @@ export const Agents: CollectionConfig = {
       admin: { hidden: true },
     },
     {
+      name: 'voiceTemplate',
+      type: 'text',
+      admin: { hidden: true },
+    },
+    {
       name: 'elevenlabsAgentId',
       type: 'text',
       admin: { hidden: true },

@@ -28,11 +28,22 @@ async function getElevenLabsService(): Promise<ElevenLabsService | null> {
     const payload = await getPayload({ config })
     const providers = await payload.find({
       collection: 'ai-providers' as any,
-      where: { name: { equals: 'ElevenLabs' } },
+      where: { name: { like: 'elevenlabs' } },
       limit: 1,
       depth: 0,
     })
-    const provider = providers.docs[0] as any
+    let provider = providers.docs[0] as any
+    if (!provider?.apiKey) {
+      // Fallback: try to find any provider with elevenlabs-related API key pattern
+      const all = await payload.find({
+        collection: 'ai-providers' as any,
+        limit: 50,
+        depth: 0,
+      })
+      provider = (all.docs as any[]).find((p: any) =>
+        p.apiKey && typeof p.apiKey === 'string' && p.apiKey.startsWith('sk_')
+      )
+    }
     if (!provider?.apiKey) return null
     return new ElevenLabsService(provider.apiKey)
   } catch {
