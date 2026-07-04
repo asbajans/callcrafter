@@ -44,6 +44,8 @@ export default function AgentTestModal({
   const listeningRef = useRef(false)
   const vadIntervalRef = useRef<any>(null)
   const inCallRef = useRef(false)
+  const ttsPlayingRef = useRef(false)
+  const bargeInResolveRef = useRef<(() => void) | null>(null)
   const sendMessageRef = useRef<((text: string) => Promise<string | null>) | null>(null)
   const processSpeechChunksRef = useRef<((chunks: Blob[]) => Promise<void>) | null>(null)
 
@@ -67,6 +69,8 @@ export default function AgentTestModal({
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
     setInCall(false)
     inCallRef.current = false
+    ttsPlayingRef.current = false
+    bargeInResolveRef.current = null
     setStatusText('')
     listeningRef.current = false
   }
@@ -114,6 +118,9 @@ export default function AgentTestModal({
         .replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
       if (!cleanText) { resolve(); return }
       setStatusText('Yanıt seslendiriliyor...')
+      listeningRef.current = true
+      ttsPlayingRef.current = true
+      bargeInResolveRef.current = resolve
       fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(cleanText)}&provider=${encodeURIComponent(ttsProvider)}`)
         .then(res => {
           if (!res.ok) throw new Error('TTS failed')
@@ -123,12 +130,26 @@ export default function AgentTestModal({
           const url = URL.createObjectURL(audioBlob)
           const audio = new Audio(url)
           audioRef.current = audio
-          audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve() }
-          audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve() }
+          audio.onended = () => {
+            URL.revokeObjectURL(url)
+            audioRef.current = null
+            ttsPlayingRef.current = false
+            bargeInResolveRef.current = null
+            resolve()
+          }
+          audio.onerror = () => {
+            URL.revokeObjectURL(url)
+            audioRef.current = null
+            ttsPlayingRef.current = false
+            bargeInResolveRef.current = null
+            resolve()
+          }
           audio.play()
         })
         .catch((err) => {
           console.error('TTS playback error:', err)
+          ttsPlayingRef.current = false
+          bargeInResolveRef.current = null
           setStatusText('Seslendirme hatası')
           setTimeout(() => { if (inCallRef.current) { setStatusText('Dinliyor...'); listeningRef.current = true } }, 1500)
           resolve()
@@ -142,13 +163,14 @@ export default function AgentTestModal({
     const dataArray = new Uint8Array(bufferLength)
     const SILENCE_THRESHOLD = 45
     const SILENCE_TIMEOUT = 3000
+    const BARGE_IN_THRESHOLD = 60
 
     isSpeakingRef.current = false
     silenceStartRef.current = 0
     speechBufferRef.current = []
 
     vadIntervalRef.current = setInterval(() => {
-      if (!listeningRef.current || !analyser) return
+      if (!analyser) return
 
       analyser.getByteTimeDomainData(dataArray)
       let sum = 0
@@ -157,6 +179,28 @@ export default function AgentTestModal({
         sum += value * value
       }
       const rms = Math.sqrt(sum / bufferLength)
+
+      if (ttsPlayingRef.current && rms > BARGE_IN_THRESHOLD / 128) {
+        const audio = audioRef.current
+        if (audio) {
+          audio.pause()
+          audio.src = ''
+          audioRef.current = null
+        }
+        ttsPlayingRef.current = false
+        const chunks = [...speechBufferRef.current]
+        speechBufferRef.current = []
+        const resolve = bargeInResolveRef.current
+        bargeInResolveRef.current = null
+        if (resolve) resolve()
+        if (chunks.length > 0) {
+          listeningRef.current = false
+          processSpeechChunksRef.current!(chunks)
+        }
+        return
+      }
+
+      if (!listeningRef.current) return
 
       if (rms > SILENCE_THRESHOLD / 128) {
         if (!isSpeakingRef.current) {

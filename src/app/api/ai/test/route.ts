@@ -77,9 +77,11 @@ export async function POST(req: NextRequest) {
       trainingContext = trainingDocs.docs.map((d: any) => d.content).join('\n\n').slice(0, 10000)
     }
 
+    const shortResponseInstruction = '\n\nIMPORTANT: Keep your responses extremely short and concise (1-2 sentences maximum). Do not add unnecessary details or explanations. Be direct and brief.'
+
     const fullSystemPrompt = trainingContext
-      ? `${systemPrompt}\n\n## Training Context\n${trainingContext}`
-      : systemPrompt
+      ? `${systemPrompt}\n\n## Training Context\n${trainingContext}${shortResponseInstruction}`
+      : `${systemPrompt}${shortResponseInstruction}`
 
     const conversationHistory = (history || []).map((h: any) => ({
       role: h.role,

@@ -99,6 +99,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI Provider API key not configured' }, { status: 500 })
     }
 
+    const shortResponseInstruction = '\n\nIMPORTANT: Keep your responses extremely short and concise (1-2 sentences maximum). Do not add unnecessary details or explanations. Be direct and brief.'
+    const fullSystemPrompt = agent.systemPrompt
+      ? `${agent.systemPrompt}${shortResponseInstruction}`
+      : `You are a helpful assistant.${shortResponseInstruction}`
+
     const orchestrator = new AgentOrchestrator({
       provider: providerConfig.providerType as 'openai' | 'anthropic',
       apiKey: providerConfig.apiKey,
@@ -112,7 +117,7 @@ export async function POST(req: NextRequest) {
       context: {
         agentId: agent.id,
         tenantId,
-        systemPrompt: agent.systemPrompt,
+        systemPrompt: fullSystemPrompt,
         conversationHistory: conversationHistory || [],
         trainingContext,
         channel: 'voice',
