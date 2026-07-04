@@ -38,7 +38,8 @@
     "creditPackages": "Kredi Paketleri",
     "aiProviders": "AI Sağlayıcıları",
     "usage": "Kullanım",
-    "diagnostics": "Test"
+    "diagnostics": "Test",
+    "elevenlabs": "ElevenLabs"
   },
   "agent": {
     "create": "Yeni Asistan Oluştur",

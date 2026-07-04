@@ -38,7 +38,8 @@
     "creditPackages": "Credit Packages",
     "aiProviders": "AI Providers",
     "usage": "Usage",
-    "diagnostics": "Diagnostics"
+    "diagnostics": "Diagnostics",
+    "elevenlabs": "ElevenLabs"
   },
   "agent": {
     "create": "Create New Agent",

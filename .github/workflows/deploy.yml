@@ -28,36 +28,6 @@ jobs:
             asbajans/callcrafter:latest
             asbajans/callcrafter:${{ github.sha }}
 
-      - name: Build and push ws-server
-        uses: docker/build-push-action@v6
-        with:
-          context: ws-server
-          file: ws-server/Dockerfile
-          push: true
-          tags: |
-            asbajans/callcrafter-ws:latest
-            asbajans/callcrafter-ws:${{ github.sha }}
-
-      - name: Build and push piper-server
-        uses: docker/build-push-action@v6
-        with:
-          context: piper-server
-          file: piper-server/Dockerfile
-          push: true
-          tags: |
-            asbajans/callcrafter-piper:latest
-            asbajans/callcrafter-piper:${{ github.sha }}
-
-      - name: Build and push edge-tts-server
-        uses: docker/build-push-action@v6
-        with:
-          context: edge-tts-server
-          file: edge-tts-server/Dockerfile
-          push: true
-          tags: |
-            asbajans/callcrafter-edge-tts:latest
-            asbajans/callcrafter-edge-tts:${{ github.sha }}
-
       - name: Trigger Portainer redeploy (webhook)
         run: |
           for i in 1 2; do

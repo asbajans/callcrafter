@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { api } from '@/lib/api';
-import type { Voice } from '@/lib/voices';
 import {
   Plus,
   Pencil,
@@ -33,16 +32,14 @@ type Agent = {
   name: string;
   description: string | null;
   systemPrompt: string | null;
-  voice: string | null;
-  voiceName: string | null;
   language: string;
   temperature: number;
   channels: string[];
   greetingMessage: string | null;
   status: string;
   model?: string | null;
-  ttsProvider?: string | null;
   provider?: number | { id: number } | null;
+  voiceEngine?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -56,11 +53,16 @@ const CHANNEL_OPTIONS = [
 ];
 const STATUSES = ['Active', 'Inactive', 'Testing'] as const;
 
+const VOICE_ENGINES = [
+  { value: 'natural-tr-female', label: 'Doğal Türkçe Kadın' },
+  { value: 'professional-us-female', label: 'Profesyonel US Kadın' },
+  { value: 'natural-gb-female', label: 'Doğal İngiliz Kadın' },
+] as const;
+
 const agentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional().default(''),
   systemPrompt: z.string().min(1, 'System prompt is required'),
-  voice: z.string().min(1, 'Voice is required'),
   language: z.enum(LANGUAGES),
   temperature: z.number().min(0).max(2),
   channels: z.array(z.enum(['voice', 'whatsapp', 'instagram', 'web'])).min(1, 'Select at least one channel'),
@@ -68,9 +70,7 @@ const agentSchema = z.object({
   status: z.enum(['Active', 'Inactive', 'Testing']),
   provider: z.number().optional(),
   model: z.string().optional(),
-  ttsProvider: z.enum(['auto', 'edge-tts', 'elevenlabs', 'piper']).optional().default('auto'),
-  pitch: z.number().min(-100).max(100).optional().default(0),
-  rate: z.number().min(-50).max(50).optional().default(0),
+  voiceEngine: z.string().optional().default('natural-tr-female'),
 });
 
 type AgentFormData = z.infer<typeof agentSchema>;
@@ -89,7 +89,6 @@ const defaultFormData: AgentFormData = {
   name: '',
   description: '',
   systemPrompt: '',
-  voice: '',
   language: 'EN',
   temperature: 0.7,
   channels: ['voice'],
@@ -97,9 +96,7 @@ const defaultFormData: AgentFormData = {
   status: 'Active',
   provider: undefined,
   model: undefined,
-  ttsProvider: 'auto',
-  pitch: 0,
-  rate: 0,
+  voiceEngine: 'natural-tr-female',
 };
 
 function AgentFormModal({
@@ -107,7 +104,6 @@ function AgentFormModal({
   onOpenChange,
   onSubmit,
   initialData,
-  voices,
   providers,
   loading,
   planLimits,
@@ -116,7 +112,6 @@ function AgentFormModal({
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: AgentFormData) => Promise<void>;
   initialData?: AgentFormData | null;
-  voices: (Voice & { provider?: string })[];
   providers: AiProvider[];
   loading: boolean;
   planLimits?: { allowedTtsProviders?: string[]; allowedAiModels?: string[]; allowedChannels?: string[] } | null;
@@ -124,92 +119,17 @@ function AgentFormModal({
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof AgentFormData, string>>>({});
-  const [elevenLabsVoices, setElevenLabsVoices] = useState<{ id: string; name: string; provider?: string }[]>([]);
-  const [loadingElevenLabs, setLoadingElevenLabs] = useState(false);
-  const [elevenLabsError, setElevenLabsError] = useState<string | null>(null);
-  const [elevenLabsFetched, setElevenLabsFetched] = useState(false);
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
-  const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setForm(initialData ?? defaultFormData);
     setErrors({});
-    setElevenLabsVoices([]);
-    setElevenLabsError(null);
-    setElevenLabsFetched(false);
-    setVoiceDropdownOpen(false);
   }, [initialData, open]);
-
-  const fetchElevenLabsVoices = useCallback(async () => {
-    setLoadingElevenLabs(true);
-    setElevenLabsError(null);
-    try {
-      const data = await api.getVoices();
-      const elVoices = data.voices.filter((v) => v.provider === 'elevenlabs');
-      setElevenLabsVoices(elVoices);
-      if (elVoices.length === 0) {
-        setElevenLabsError('ElevenLabs ses bulunamadı. API anahtarınızı kontrol edin.');
-      }
-    } catch {
-      setElevenLabsError('ElevenLabs sesleri alınamadı. API bağlantısını kontrol edin.');
-    } finally {
-      setLoadingElevenLabs(false);
-      setElevenLabsFetched(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (form.ttsProvider === 'elevenlabs' && !elevenLabsFetched && !loadingElevenLabs) {
-      fetchElevenLabsVoices();
-    }
-  }, [form.ttsProvider, elevenLabsFetched, loadingElevenLabs, fetchElevenLabsVoices]);
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  const previewVoice = useCallback(async (voiceId: string, provider: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (previewingVoice === voiceId) {
-      setPreviewingVoice(null);
-      return;
-    }
-    setPreviewingVoice(voiceId);
-    try {
-      const testText = voiceId.startsWith('tr-') || voiceId.startsWith('tr_')
-        ? 'Merhaba, ben CallCrafter yapay zeka asistanıyım. Size nasıl yardımcı olabilirim?'
-        : 'Hello, I am CallCrafter AI assistant. How can I help you today?';
-      const res = await fetch(`/api/voices/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(testText)}&provider=${provider}`);
-      if (!res.ok) throw new Error('TTS failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; setPreviewingVoice(null); };
-      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; setPreviewingVoice(null); };
-      audio.play();
-    } catch {
-      setPreviewingVoice(null);
-    }
-  }, [previewingVoice]);
 
   const update = <K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
       if (key === 'provider') {
         next.model = undefined;
-      }
-      if (key === 'ttsProvider') {
-        next.voice = '';
       }
       return next;
     });
@@ -236,7 +156,6 @@ function AgentFormModal({
     await onSubmit(result.data);
   };
 
-  const allowedTts = planLimits?.allowedTtsProviders;
   const allowedModels = planLimits?.allowedAiModels;
   const allowedCh = planLimits?.allowedChannels;
 
@@ -246,25 +165,13 @@ function AgentFormModal({
     ? rawModels.filter((m: any) => allowedModels.includes(m.modelId || m))
     : rawModels;
 
-  const useElevenLabs = form.ttsProvider === 'elevenlabs';
-  const useEdgeTTS = form.ttsProvider === 'edge-tts' || form.ttsProvider === 'auto';
-  const availableVoices = useElevenLabs
-    ? elevenLabsVoices
-    : voices.filter((v) => useEdgeTTS ? (v.provider === 'edge-tts') : (v.provider === 'piper'));
-
-  const selectedVoiceName = availableVoices.find(v => v.id === form.voice)?.name || form.voice || '';
-
-  const filteredTtsOptions = ['auto', 'edge-tts', 'piper', 'elevenlabs'].filter(opt => {
-    if (!allowedTts || allowedTts.length === 0) return true;
-    if (opt === 'auto') return true;
-    return allowedTts.includes(opt);
-  });
-
   const filteredProviders = providers.filter(p => p.isActive).filter(p => {
     if (!allowedModels || allowedModels.length === 0) return true;
     if (!p.models || p.models.length === 0) return true;
     return p.models.some((m: any) => allowedModels.includes(m.modelId || m));
   });
+
+  const selectedVoiceEngine = VOICE_ENGINES.find(v => v.value === form.voiceEngine);
 
   const filteredChannelOptions = CHANNEL_OPTIONS.filter(ch => {
     if (!allowedCh || allowedCh.length === 0) return true;
@@ -377,89 +284,38 @@ function AgentFormModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">{t('agent.voice')}</label>
-                {loadingElevenLabs ? (
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.06] text-sm text-slate-400">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    ElevenLabs sesleri yükleniyor...
-                  </div>
-                ) : elevenLabsError ? (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-sm text-red-400">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      {elevenLabsError}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={fetchElevenLabsVoices}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 self-start"
-                    >
-                      Tekrar dene
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setVoiceDropdownOpen(!voiceDropdownOpen)}
-                      onBlur={() => setTimeout(() => setVoiceDropdownOpen(false), 200)}
-                      className={cn(
-                        'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                        errors.voice ? 'border-red-500/50 bg-red-500/10' : 'border-white/[0.1] bg-white/[0.06]'
-                      )}
-                    >
-                      <span className={form.voice ? 'text-slate-100' : 'text-slate-600'}>
-                        {form.voice ? selectedVoiceName : 'Ses seç'}
-                      </span>
-                      <ChevronDown className={cn('w-4 h-4 text-slate-500 transition-transform', voiceDropdownOpen && 'rotate-180')} />
-                    </button>
-                    {voiceDropdownOpen && (
-                      <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl max-h-60 overflow-y-auto">
-                        {availableVoices.map((v) => (
-                          <div
-                            key={v.id}
-                            className={cn(
-                              'flex items-center justify-between px-3.5 py-2.5 text-sm cursor-pointer transition-colors group',
-                              form.voice === v.id
-                                ? 'bg-indigo-600/30 text-indigo-200'
-                                : 'text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200'
-                            )}
-                            onClick={() => {
-                              update('voice', v.id);
-                              setVoiceDropdownOpen(false);
-                            }}
-                          >
-                            <span className="truncate">
-                              {v.name} {(v as any).provider === 'elevenlabs' ? '(ElevenLabs)' : (v as any).provider === 'edge-tts' ? '(Edge TTS)' : `(${(v as any).language || ''})`}
-                            </span>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                previewVoice(v.id, (v as any).provider || form.ttsProvider || 'edge-tts');
-                              }}
-                              className="ml-2 p-1 rounded-md hover:bg-white/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-                              title="Sesi dinle"
-                            >
-                              {previewingVoice === v.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-300" />
-                              )}
-                            </button>
-                          </div>
-                        ))}
-                        {availableVoices.length === 0 && (
-                          <div className="px-3 py-4 text-sm text-slate-500 text-center">Ses bulunamadı</div>
-                        )}
-                      </div>
+                <label className="text-sm font-medium text-slate-300">Ses Şablonu</label>
+                <Select.Root
+                  value={form.voiceEngine || 'natural-tr-female'}
+                  onValueChange={(v) => update('voiceEngine', v)}
+                >
+                  <Select.Trigger
+                    className={cn(
+                      'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                      'border-white/[0.1] bg-white/[0.06]'
                     )}
-                  </div>
-                )}
-                {errors.voice && <p className="text-xs text-red-400">{errors.voice}</p>}
+                  >
+                    <Select.Value />
+                    <Select.Icon>
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                      <Select.Viewport>
+                        {VOICE_ENGINES.map((ve) => (
+                          <Select.Item
+                            key={ve.value}
+                            value={ve.value}
+                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none"
+                          >
+                            <Select.ItemText>{ve.label}</Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
               </div>
 
               <div className="space-y-1.5">
@@ -493,47 +349,6 @@ function AgentFormModal({
                   </Select.Portal>
                 </Select.Root>
                 {errors.language && <p className="text-xs text-red-400">{errors.language}</p>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">
-                  Ses Perdesi (Pitch): <span className="text-indigo-400">{form.pitch}Hz</span>
-                </label>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  step="1"
-                  value={form.pitch}
-                  onChange={(e) => update('pitch', parseInt(e.target.value))}
-                  className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.1] accent-indigo-500"
-                />
-                <div className="flex justify-between text-xs text-slate-600">
-                  <span>-100 (Kalın)</span>
-                  <span>0 (Normal)</span>
-                  <span>+100 (İnce)</span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-300">
-                  Konuşma Hızı (Rate): <span className="text-indigo-400">{form.rate > 0 ? `+${form.rate}` : form.rate}%</span>
-                </label>
-                <input
-                  type="range"
-                  min="-50"
-                  max="50"
-                  step="1"
-                  value={form.rate}
-                  onChange={(e) => update('rate', parseInt(e.target.value))}
-                  className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/[0.1] accent-indigo-500"
-                />
-                <div className="flex justify-between text-xs text-slate-600">
-                  <span>-50 (Yavaş)</span>
-                  <span>0 (Normal)</span>
-                  <span>+50 (Hızlı)</span>
-                </div>
               </div>
             </div>
 
@@ -628,46 +443,6 @@ function AgentFormModal({
                   </Select.Portal>
                 </Select.Root>
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300">Ses Motoru</label>
-              <Select.Root
-                value={form.ttsProvider || 'auto'}
-                onValueChange={(v) => update('ttsProvider', v as 'auto' | 'edge-tts' | 'elevenlabs' | 'piper')}
-              >
-                <Select.Trigger
-                  className={cn(
-                    'w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                    'border-white/[0.1] bg-white/[0.06]'
-                  )}
-                >
-                  <Select.Value />
-                  <Select.Icon>
-                    <ChevronDown className="w-4 h-4 text-slate-500" />
-                  </Select.Icon>
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Content className="z-50 bg-slate-800 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                    <Select.Viewport>
-                      {filteredTtsOptions.map(opt => {
-                        const labels: Record<string, string> = {
-                          auto: 'Otomatik (önce Edge TTS)',
-                          'edge-tts': 'Edge TTS (Microsoft, ucretsiz)',
-                          piper: 'Piper (yerel, offline)',
-                          elevenlabs: 'ElevenLabs (ucretli)',
-                        };
-                        return (
-                          <Select.Item key={opt} value={opt}
-                            className="px-3.5 py-2.5 text-sm text-slate-300 hover:bg-indigo-600/30 hover:text-indigo-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[highlighted]:text-indigo-200 outline-none">
-                            <Select.ItemText>{labels[opt] || opt}</Select.ItemText>
-                          </Select.Item>
-                        );
-                      })}
-                    </Select.Viewport>
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
             </div>
 
             <div className="space-y-1.5">
@@ -795,7 +570,6 @@ export default function AgentsPage() {
   const t = useTranslations();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [voices, setVoices] = useState<(Voice & { provider?: string })[]>([]);
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [planLimits, setPlanLimits] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -809,7 +583,7 @@ export default function AgentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voice?: string | null; ttsProvider?: string | null } | null>(null);
+  const [testAgent, setTestAgent] = useState<{ id: string; name: string; model?: string | null; voiceEngine?: string | null } | null>(null);
   const [testDefaultTab, setTestDefaultTab] = useState<'text' | 'voice'>('text');
 
   const fetchAgents = useCallback(async () => {
@@ -821,19 +595,6 @@ export default function AgentsPage() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
-    }
-  }, []);
-
-  const fetchVoices = useCallback(async () => {
-    try {
-      const data = await api.getVoices();
-      const allVoices = data.voices ?? [];
-      setVoices(allVoices.map((v: any) => ({
-        ...v,
-        id: v.id || v.voiceId,
-      })));
-    } catch {
-      // non-critical
     }
   }, []);
 
@@ -859,7 +620,6 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
     fetchProviders();
-    fetchVoices();
     fetchPlanLimits();
   }, [fetchAgents, fetchProviders, fetchPlanLimits]);
 
@@ -875,7 +635,6 @@ export default function AgentsPage() {
       name: agent.name,
       description: agent.description ?? '',
       systemPrompt: agent.systemPrompt ?? '',
-      voice: agent.voice ?? '',
       language: agent.language as AgentFormData['language'],
       temperature: agent.temperature,
       channels: agent.channels as AgentFormData['channels'],
@@ -883,9 +642,7 @@ export default function AgentsPage() {
       status: agent.status as AgentFormData['status'],
       provider: providerId || undefined,
       model: agent.model || undefined,
-      ttsProvider: (agent.ttsProvider as 'auto' | 'edge-tts' | 'elevenlabs' | 'piper') || 'auto',
-      pitch: typeof (agent as any).pitch === 'number' ? (agent as any).pitch : 0,
-      rate: typeof (agent as any).rate === 'number' ? (agent as any).rate : 0,
+      voiceEngine: agent.voiceEngine || 'natural-tr-female',
     });
     setEditingId(agent.id);
     setModalOpen(true);
@@ -909,13 +666,10 @@ export default function AgentsPage() {
         }
       }
 
-      const voiceName = data.voice;
       const payload = {
         name: data.name,
         description: data.description,
         systemPrompt: data.systemPrompt,
-        voice: data.voice,
-        voiceName,
         language: data.language.toLowerCase(),
         temperature: data.temperature,
         channels: data.channels,
@@ -923,9 +677,7 @@ export default function AgentsPage() {
         status: data.status.toLowerCase(),
         ...(data.provider ? { provider: data.provider } : {}),
         ...(data.model ? { model: data.model } : {}),
-        ttsProvider: data.ttsProvider || 'auto',
-        pitch: data.pitch ?? 0,
-        rate: data.rate ?? 0,
+        voiceEngine: data.voiceEngine || 'natural-tr-female',
       };
       if (editingId) {
         await api.updateAgent(editingId, payload);
@@ -1055,12 +807,7 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
-                      <span>{agent.voiceName || agent.voice || '—'}</span>
-                      {agent.ttsProvider && agent.ttsProvider !== 'auto' && (
-                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-medium">
-                          {agent.ttsProvider === 'elevenlabs' ? 'EL' : agent.ttsProvider === 'edge-tts' ? 'Edge' : 'Piper'}
-                        </span>
-                      )}
+                      <span>{VOICE_ENGINES.find(v => v.value === agent.voiceEngine)?.label || agent.voiceEngine || '—'}</span>
                     </td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
                       <span className="text-xs font-medium text-slate-400 bg-white/[0.06] px-2 py-1 rounded-lg">{agent.language}</span>
@@ -1084,14 +831,14 @@ export default function AgentsPage() {
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice, ttsProvider: agent.ttsProvider }); }}
+                          onClick={() => { setTestDefaultTab('text'); setTestAgent({ id: agent.id, name: agent.name, voiceEngine: agent.voiceEngine }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
                           title="Yazılı Test"
                         >
                           <MessageSquare className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voice: agent.voice, ttsProvider: agent.ttsProvider }); }}
+                          onClick={() => { setTestDefaultTab('voice'); setTestAgent({ id: agent.id, name: agent.name, voiceEngine: agent.voiceEngine }); }}
                           className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                           title="Sesli Test"
                         >
@@ -1124,7 +871,6 @@ export default function AgentsPage() {
         }}
         onSubmit={handleFormSubmit}
         initialData={editingAgent}
-        voices={voices}
         providers={providers}
         loading={submitting}
         planLimits={planLimits}
