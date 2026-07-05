@@ -21,7 +21,7 @@ interface AgentSyncStatus {
   name: string;
   language: string;
   voiceEngine: string;
-  voiceEngineLabel: string;
+  voiceTemplate: string;
   elevenlabsAgentId: string | null;
   elevenlabsAgentName: string | null;
   elevenlabsVoice: string | null;
@@ -37,6 +37,11 @@ interface ElevenLabsVoice {
   labels?: Record<string, string>;
 }
 
+const getVoiceName = (voiceId: string, voices: ElevenLabsVoice[]): string => {
+  const found = voices.find(v => v.voice_id === voiceId)
+  return found?.name || voiceId
+}
+
 export default function AdminElevenLabsPage() {
   const t = useTranslations();
   const [agents, setAgents] = useState<AgentSyncStatus[]>([]);
@@ -45,8 +50,6 @@ export default function AdminElevenLabsPage() {
   const [error, setError] = useState<string | null>(null);
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<number | null>(null);
-  const [syncModal, setSyncModal] = useState<{ agent: AgentSyncStatus; voices: ElevenLabsVoice[] } | null>(null);
-  const [selectedVoice, setSelectedVoice] = useState('');
   const [showVoices, setShowVoices] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -78,19 +81,18 @@ export default function AdminElevenLabsPage() {
 
   useEffect(() => { fetchData() }, [fetchData]);
 
-  const handleSync = async (agentId: number, voiceId: string) => {
+  const handleSync = async (agentId: number) => {
     setSyncingId(agentId);
     try {
       const res = await fetch('/api/admin/elevenlabs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action: 'sync', agentId, elevenlabsVoiceId: voiceId }),
+        body: JSON.stringify({ action: 'sync', agentId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Sync failed');
       toast.success(`Agent ${data.action === 'created' ? 'oluşturuldu' : 'güncellendi'}: ${data.agentId}`);
-      setSyncModal(null);
       fetchData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Sync failed');
@@ -161,7 +163,7 @@ export default function AdminElevenLabsPage() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Asistan</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Ses Şablonu</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Seçili Ses</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Dil</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">ElevenLBS ID</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Durum</th>
@@ -195,7 +197,12 @@ export default function AdminElevenLabsPage() {
                           <span className="font-medium text-slate-900">{agent.name}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-slate-600">{agent.voiceEngineLabel}</td>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="text-sm text-slate-600">{getVoiceName(agent.elevenlabsVoice || agent.voiceTemplate, voices)}</span>
+                        </div>
+                      </td>
                       <td className="px-6 py-3">
                         <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{agent.language}</span>
                       </td>
@@ -216,10 +223,7 @@ export default function AdminElevenLabsPage() {
                         ) : (
                           <div className="flex items-center justify-end gap-1">
                             <button
-                              onClick={() => {
-                                setSelectedVoice(agent.elevenlabsVoice || '');
-                                setSyncModal({ agent, voices });
-                              }}
+                              onClick={() => handleSync(agent.id)}
                               className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
                               title={isSynced ? 'ElevenLabs agent güncelle' : 'ElevenLabs agent oluştur'}
                             >
@@ -281,78 +285,10 @@ export default function AdminElevenLabsPage() {
         )}
       </div>
 
-      {syncModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSyncModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {syncModal.agent.elevenlabsAgentId ? 'ElevenLabs Agent Güncelle' : 'ElevenLabs Agent Oluştur'}
-              </h2>
-              <button onClick={() => setSyncModal(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-slate-700 mb-1">Asistan</p>
-                <p className="text-sm text-slate-900 font-medium">{syncModal.agent.name}</p>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">ElevenLabs Sesi</label>
-                {syncModal.voices.length === 0 ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-700">
-                    {voicesError || 'Ses listesi alınamadı. ElevenLabs API anahtarınızı kontrol edin.'}
-                  </div>
-                ) : (
-                  <>
-                    <select
-                      value={selectedVoice}
-                      onChange={(e) => setSelectedVoice(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-                    >
-                      <option value="">Ses seçin</option>
-                      {syncModal.voices.map((v) => (
-                        <option key={v.voice_id} value={v.voice_id}>
-                          {v.name} ({v.voice_id.slice(0, 8)}...)
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {syncModal.agent.language?.toLowerCase() === 'tr'
-                        ? 'Türkçe için Türkçe destekli ses seçmeniz önerilir.'
-                        : 'English için İngilizce ses seçmeniz önerilir.'}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
-                <RefreshCw className="w-3.5 h-3.5" />
-                {syncModal.agent.elevenlabsAgentId
-                  ? `Mevcut ElevenLabs agent güncellenecek: ${syncModal.agent.elevenlabsAgentId}`
-                  : 'Yeni ElevenLabs agent oluşturulacak'}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setSyncModal(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-              >
-                İptal
-              </button>
-              <button
-                onClick={() => handleSync(syncModal.agent.id, selectedVoice)}
-                disabled={!selectedVoice || syncingId === syncModal.agent.id}
-                className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {syncingId === syncModal.agent.id && <Loader2 className="w-4 h-4 animate-spin" />}
-                {syncModal.agent.elevenlabsAgentId ? 'Güncelle' : 'Oluştur'}
-              </button>
-            </div>
-          </div>
+      {voicesError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-700 text-sm flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          {voicesError}
         </div>
       )}
     </div>

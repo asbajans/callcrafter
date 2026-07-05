@@ -121,17 +121,17 @@ export async function GET(req: NextRequest) {
       const elId = a.elevenlabsAgentId || null
       const elAgent = elId ? elevenlabsAgentMap[elId] : null
       return {
-        id: a.id,
-        name: a.name,
-        language: a.language,
-        voiceEngine: a.voiceEngine || 'natural-tr-female',
-        voiceEngineLabel: VOICE_ENGINE_LABELS[a.voiceEngine] || a.voiceEngine || 'Doğal Türkçe Kadın',
-        elevenlabsAgentId: elId,
-        elevenlabsAgentName: elAgent?.name || null,
-        elevenlabsVoice: a.elevenlabsVoice || null,
-        elevenlabsPhoneNumberId: a.elevenlabsPhoneNumberId || null,
-        status: a.status,
-        createdAt: a.createdAt,
+      id: a.id,
+      name: a.name,
+      language: a.language,
+      voiceEngine: a.voiceEngine || 'elevenlabs',
+      voiceTemplate: a.voiceTemplate || 'natural-tr-female',
+      elevenlabsAgentId: elId,
+      elevenlabsAgentName: elAgent?.name || null,
+      elevenlabsVoice: a.elevenlabsVoice || a.voiceTemplate || null,
+      elevenlabsPhoneNumberId: a.elevenlabsPhoneNumberId || null,
+      status: a.status,
+      createdAt: a.createdAt,
       }
     })
 
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
       }
 
       const a = agent as any
-      const voiceId = elevenlabsVoiceId || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
+      const voiceId = elevenlabsVoiceId || a.voiceTemplate || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
       const firstMsg = a.greetingMessage || 'Merhaba, size nasıl yardımcı olabilirim?'
       const lang = (a.language || 'tr').toLowerCase()
       const prompt = a.systemPrompt || 'Sen yardımsever bir AI asistanısın.'
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
             data: { elevenlabsVoice: voiceId, elevenlabsLanguage: lang } as any,
           })
 
-          return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId })
+          return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId, voiceId })
         } else {
           const result = await el.createAgent({
             name: a.name,
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
             } as any,
           })
 
-          return NextResponse.json({ success: true, action: 'created', agentId: result.agent_id })
+          return NextResponse.json({ success: true, action: 'created', agentId: result.agent_id, voiceId })
         }
       } catch (err: any) {
         return NextResponse.json({
