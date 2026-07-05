@@ -34,11 +34,14 @@ export class ElevenLabsService {
       'xi-api-key': this.apiKey,
       'Content-Type': 'application/json',
     }
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
     const res = await fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
     if (!res.ok) {
       const text = await res.text()
       throw new Error(`ElevenLabs API error (${res.status}): ${text}`)
