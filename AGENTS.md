@@ -157,6 +157,98 @@ npm run typecheck              # App TS check
 npm run build                  # Production build
 ```
 
+## Deployment
+
+### Stack Type: File-Based (Type 2)
+
+Portainer stack `callcrafterai` (ID: 56) is **file-based**, not Git-connected. The compose file is stored directly in Portainer at `/data/compose/56`.
+
+**Why not Git-based?** Stack was created from an app template (`FromAppTemplate: true`), which creates Type 2 (file) stacks. Cannot be converted to Type 1 (Git) via API — would need recreate.
+
+### GitHub Actions Auto-Deploy
+
+Push to `master` triggers `.github/workflows/deploy.yml`:
+
+1. Checkout code
+2. Build Docker image with Docker Buildx
+3. Push to Docker Hub as `asbajans/callcrafter:latest` + `:${{ github.sha }}`
+4. Call webhook URL to trigger Portainer redeploy
+
+```yaml
+# .github/workflows/deploy.yml — Portainer redeploy step (simplified)
+- name: Trigger Portainer redeploy (webhook)
+  run: |
+    RESP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+      "${{ secrets.PORTAINER_WEBHOOK_URL }}")
+```
+
+### Webhook URL
+
+Configured in GitHub → Settings → Secrets and variables → Actions:
+
+| Secret                  | Value                                                                    |
+|-------------------------|--------------------------------------------------------------------------|
+| `PORTAINER_WEBHOOK_URL` | `https://cont.asb.web.tr/api/stacks/webhooks/c4a727ef-8ea5-4504-a58c-2469595b863a` |
+| `DOCKER_USERNAME`       | `asbajans`                                                               |
+| `DOCKER_PASSWORD`       | _(Docker Hub token)_                                                     |
+
+The webhook URL was previously empty — now set correctly.
+
+### Stack Environment Variables
+
+Set in Portainer stack env (not in compose file):
+
+| Variable                    | Value                                                                 |
+|-----------------------------|-----------------------------------------------------------------------|
+| `POSTGRES_DB`               | `callcrafter_saas`                                                    |
+| `POSTGRES_USER`             | `postgres`                                                            |
+| `POSTGRES_PASSWORD`         | `postcall1212`                                                        |
+| `DATABASE_URI`              | `postgresql://postgres:postcall1212@postgres:5432/callcrafter_saas`   |
+| `PAYLOAD_SECRET`            | `callcrafter-dev-secret-key-2024`                                     |
+| `REDIS_URL`                 | `redis://redis:6379`                                                  |
+| `NEXT_PUBLIC_BASE_URL`      | `https://callcrafter.com.tr`                                          |
+| `NEXT_PUBLIC_APP_URL`       | `https://callcrafter.com.tr`                                          |
+| `INTERNAL_API_KEY`          | `callcrafter-dev-internal-key-2024`                                   |
+| `ELEVENLABS_API_KEY`        | `sk_b92d9eda05e6d126b556358acac1e5e4e7372c04862180fb`                |
+| `STRIPE_SECRET_KEY`         | `sk_live_...`                                                         |
+| `STRIPE_PUBLISHABLE_KEY`    | `pk_live_...`                                                         |
+| `WA_BRIDGE_API_KEY`         | `callcrafter-dev-wa-key`                                              |
+| `WA_BRIDGE_WEBHOOK_SECRET`  | `callcrafter-dev-wa-webhook-secret`                                   |
+| `WA_BRIDGE_URL`             | `http://wa-bridge:8080`                                               |
+| `WHATSAPP_CONTEXT_RESET_MINUTES` | `30`                                                             |
+| `WHATSAPP_AUTO_TICKET`      | `false`                                                               |
+
+### Manual Redeploy (when webhook fails)
+
+```bash
+# 1. Stop old container
+curl -s -X POST "http://192.168.0.243:9000/api/endpoints/2/docker/containers/app/stop" \
+  -H "X-API-Key: ptr_yYMgVDOuGrA1zEllYc/uviu6aJpZvy2qFUdxQClM27M="
+
+# 2. Remove old container
+curl -s -X DELETE "http://192.168.0.243:9000/api/endpoints/2/docker/containers/app?force=true" \
+  -H "X-API-Key: ptr_yYMgVDOuGrA1zEllYc/uviu6aJpZvy2qFUdxQClM27M="
+
+# 3. Pull + redeploy stack (must include StackFileContent + all Env)
+GET /api/stacks/56/file?endpointId=2   # get current compose content
+PUT /api/stacks/56?endpointId=2         # update stack with same content + PullImage: true + all Env vars
+```
+
+**Warning:** `PUT /api/stacks/56` overwrites both compose file AND environment variables — always pass the full `Env` array. Omitting `Env` wipes all stack env vars (breaks DATABASE_URI, ELEVENLABS_API_KEY, etc.).
+
+### Portainer API Key
+
+`ptr_yYMgVDOuGrA1zEllYc/uviu6aJpZvy2qFUdxQClM27M=`
+
+Host: `192.168.0.243:9000`
+
+### Common Issues
+
+- **Webhook URL empty / redeploy not triggered**: Check GitHub secret `PORTAINER_WEBHOOK_URL`. If missing, paste from webhook URL above.
+- **Env vars wiped after PUT**: Always include full `Env` array in PUT body (30 vars).
+- **App starts with empty env**: Stack env vars were cleared — re-apply via PUT with correct Env array.
+- **Compose file mismatch**: `config/portainer-stack.yml` in repo is source of truth, but Portainer has its own copy. After changing compose in repo, update it in Portainer manually or via PUT API.
+
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
 - 4 Pricing Plans

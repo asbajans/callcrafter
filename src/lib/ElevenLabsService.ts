@@ -22,6 +22,7 @@ interface AgentConfig {
     language_presets?: Record<string, any>
   }
   platform_settings?: Record<string, any>
+  tags?: string[]
 }
 
 export class ElevenLabsService {
@@ -137,6 +138,7 @@ export class ElevenLabsService {
     temperature?: number
     webhookUrl?: string
     webhookSecret?: string
+    tags?: string[]
   }): AgentConfig {
     const config: AgentConfig = {
       name: params.name,
@@ -160,6 +162,9 @@ export class ElevenLabsService {
         url: params.webhookUrl,
         secret: params.webhookSecret,
       }
+    }
+    if (params.tags?.length) {
+      config.tags = params.tags
     }
     return config
   }

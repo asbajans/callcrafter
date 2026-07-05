@@ -172,12 +172,16 @@ export async function POST(req: NextRequest) {
     const payload = await getPayload({ config })
 
     if (action === 'sync') {
-      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 })
+      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 1 })
       if (!agent) {
         return NextResponse.json({ error: 'Agent bulunamadı' }, { status: 404 })
       }
 
       const a = agent as any
+      const tenantId = a.tenant?.id || a.tenant
+      const tenantName = a.tenant?.name || `tenant-${tenantId}`
+      const agentName = `${tenantName} - ${a.name}`
+      const tags = [`tenant:${tenantId}`, `tenant:${tenantName}`]
       const voiceId = elevenlabsVoiceId || a.voiceTemplate || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
       const firstMsg = a.greetingMessage || 'Merhaba, size nasıl yardımcı olabilirim?'
       const lang = (a.language || 'tr').toLowerCase()
@@ -186,13 +190,14 @@ export async function POST(req: NextRequest) {
       try {
         if (a.elevenlabsAgentId) {
           await el.updateAgent(a.elevenlabsAgentId, {
-            name: a.name,
+            name: agentName,
             conversation_config: {
               agent: { prompt, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
               webhook: { url: webhookUrl },
             },
+            tags,
           })
 
           await payload.update({
@@ -203,13 +208,14 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId, voiceId })
         } else {
           const result = await el.createAgent({
-            name: a.name,
+            name: agentName,
             conversation_config: {
               agent: { prompt, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
               webhook: { url: webhookUrl },
             },
+            tags,
           })
 
           await payload.update({
