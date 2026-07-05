@@ -96,6 +96,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (action === 'user-info') {
+      if (!el) return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı' }, { status: 400 })
+      try {
+        const data = await el.getUserInfo()
+        return NextResponse.json({ userInfo: data })
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message })
+      }
+    }
+
     // Default: return agents with ElevenLabs status
     const payload = await getPayload({ config })
     const agentsRes = await payload.find({

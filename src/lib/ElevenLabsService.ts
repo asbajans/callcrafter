@@ -92,6 +92,10 @@ export class ElevenLabsService {
     })
   }
 
+  async getUserInfo(): Promise<any> {
+    return this.request('GET', '/user')
+  }
+
   async createOutboundCall(
     agentId: string,
     agentPhoneNumberId: string,

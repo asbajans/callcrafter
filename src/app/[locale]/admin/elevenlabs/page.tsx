@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
 import {
   Bot,
   ShieldAlert,
@@ -10,9 +9,10 @@ import {
   X,
   RefreshCw,
   Trash2,
-  Phone,
   Volume2,
-  ExternalLink,
+  Activity,
+  CreditCard,
+  Circle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,36 +37,75 @@ interface ElevenLabsVoice {
   labels?: Record<string, string>;
 }
 
+interface ElevenLabsUserInfo {
+  subscription?: {
+    tier?: string;
+    character_count?: number;
+    character_limit?: number;
+    status?: string;
+    next_character_count?: number;
+  };
+  user?: {
+    name?: string;
+    email?: string;
+  };
+}
+
 const getVoiceName = (voiceId: string, voices: ElevenLabsVoice[]): string => {
   const found = voices.find(v => v.voice_id === voiceId)
   return found?.name || voiceId
 }
 
+const formatNumber = (n: number): string => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toLocaleString()
+}
+
 export default function AdminElevenLabsPage() {
-  const t = useTranslations();
   const [agents, setAgents] = useState<AgentSyncStatus[]>([]);
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
+  const [userInfo, setUserInfo] = useState<ElevenLabsUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [voicesError, setVoicesError] = useState<string | null>(null);
+  const [userInfoError, setUserInfoError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<number | null>(null);
   const [showVoices, setShowVoices] = useState(false);
+  const [apiErrors, setApiErrors] = useState<{ time: string; message: string }[]>([]);
+
+  const addApiError = useCallback((message: string) => {
+    setApiErrors(prev => [{ time: new Date().toLocaleTimeString('tr-TR'), message }, ...prev].slice(0, 10))
+  }, [])
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [agentsRes, voicesRes] = await Promise.all([
+      const [agentsRes, voicesRes, userRes] = await Promise.all([
         fetch('/api/admin/elevenlabs'),
         fetch('/api/admin/elevenlabs?action=voices'),
+        fetch('/api/admin/elevenlabs?action=user-info'),
       ]);
       if (!agentsRes.ok) throw new Error('Failed to fetch agents');
       const agentsData = await agentsRes.json();
       const voicesData = voicesRes.ok ? await voicesRes.json() : { voices: [] };
+      const userData = userRes.ok ? await userRes.json() : null;
+
       setAgents(agentsData.agents || []);
       setVoices(voicesData.voices || []);
+
+      if (userData?.userInfo) {
+        setUserInfo(userData.userInfo);
+        setUserInfoError(null);
+      } else if (userData?.error) {
+        setUserInfoError(userData.error);
+        addApiError(userData.error);
+      }
+
       if (voicesData.error) {
         setVoicesError(voicesData.error);
+        addApiError(voicesData.error);
       } else if (voicesData.voices?.length === 0) {
         setVoicesError('ElevenLabs ses listesi alınamadı. API anahtarı eksik veya geçersiz olabilir.');
       } else {
@@ -77,7 +116,7 @@ export default function AdminElevenLabsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addApiError]);
 
   useEffect(() => { fetchData() }, [fetchData]);
 
@@ -91,7 +130,10 @@ export default function AdminElevenLabsPage() {
         body: JSON.stringify({ action: 'sync', agentId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      if (!res.ok) {
+        addApiError(data.error || 'Sync failed');
+        throw new Error(data.error || 'Sync failed');
+      }
       toast.success(`Agent ${data.action === 'created' ? 'oluşturuldu' : 'güncellendi'}: ${data.agentId}`);
       fetchData();
     } catch (err) {
@@ -112,7 +154,10 @@ export default function AdminElevenLabsPage() {
         body: JSON.stringify({ agentId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      if (!res.ok) {
+        addApiError(data.error || 'Delete failed');
+        throw new Error(data.error || 'Delete failed');
+      }
       toast.success('ElevenLabs agent silindi');
       fetchData();
     } catch (err) {
@@ -121,6 +166,10 @@ export default function AdminElevenLabsPage() {
       setSyncingId(null);
     }
   };
+
+  const subscription = userInfo?.subscription;
+  const isApiConnected = !userInfoError && userInfo !== null;
+  const characterUsage = subscription ? ((subscription.character_count || 0) / (subscription.character_limit || 1)) * 100 : 0;
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
@@ -157,6 +206,94 @@ export default function AdminElevenLabsPage() {
         </div>
       )}
 
+      {/* Account Status Card */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Connection Status */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">API Bağlantısı</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+            ) : isApiConnected ? (
+              <>
+                <Circle className="w-3 h-3 fill-emerald-500 text-emerald-500" />
+                <span className="text-sm font-medium text-emerald-700">Bağlı</span>
+              </>
+            ) : (
+              <>
+                <Circle className="w-3 h-3 fill-red-500 text-red-500" />
+                <span className="text-sm font-medium text-red-700">Bağlantı Hatası</span>
+              </>
+            )}
+          </div>
+          {userInfoError && (
+            <p className="mt-2 text-xs text-red-500 truncate" title={userInfoError}>{userInfoError}</p>
+          )}
+        </div>
+
+        {/* Subscription / Credits */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <CreditCard className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Kullanım</span>
+          </div>
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+          ) : subscription ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Karakter</span>
+                <span className="font-medium text-slate-900">
+                  {formatNumber(subscription.character_count || 0)} / {formatNumber(subscription.character_limit || 0)}
+                </span>
+              </div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    characterUsage > 80 ? 'bg-red-500' : characterUsage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(characterUsage, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Plan: {subscription.tier || '-'}</span>
+                <span>Durum: {subscription.status || '-'}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Kullanım bilgisi alınamadı</p>
+          )}
+        </div>
+
+        {/* Error Log */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldAlert className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Son Hatalar</span>
+          </div>
+          {apiErrors.length === 0 ? (
+            <div className="flex items-center gap-2">
+              <Check className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-sm text-slate-400">Son 10 hatada sorun yok</span>
+            </div>
+          ) : (
+            <div className="space-y-1.5 max-h-[100px] overflow-y-auto">
+              {apiErrors.map((e, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-xs">
+                  <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
+                  <span className="text-red-600 truncate" title={e.message}>{e.message}</span>
+                  <span className="text-slate-400 shrink-0 ml-auto">{e.time}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Agents Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -250,6 +387,7 @@ export default function AdminElevenLabsPage() {
         </div>
       </div>
 
+      {/* Available Voices */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <button
           onClick={() => setShowVoices(!showVoices)}
