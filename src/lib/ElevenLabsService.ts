@@ -15,10 +15,6 @@ interface AgentConfig {
     turn: {
       turn_timeout: number
     }
-    webhook?: {
-      url: string
-      secret?: string
-    }
     language_presets?: Record<string, any>
   }
   platform_settings?: Record<string, any>
@@ -156,12 +152,6 @@ export class ElevenLabsService {
           turn_timeout: params.turnTimeout || 10,
         },
       },
-    }
-    if (params.webhookUrl) {
-      config.conversation_config.webhook = {
-        url: params.webhookUrl,
-        secret: params.webhookSecret,
-      }
     }
     if (params.tags?.length) {
       config.tags = params.tags

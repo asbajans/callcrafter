@@ -160,10 +160,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { action, agentId, elevenlabsVoiceId } = body
-    const webhookUrl = process.env.NEXT_PUBLIC_APP_URL
-      ? `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/elevenlabs`
-      : `https://callcrafter.com.tr/api/webhooks/elevenlabs`
-
     const el = await getElevenLabsService()
     if (!el) {
       return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı. AiProviders koleksiyonunda ElevenLabs kaydını kontrol edin.' }, { status: 400 })
@@ -195,7 +191,6 @@ export async function POST(req: NextRequest) {
               agent: { prompt, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
-              webhook: { url: webhookUrl },
             },
             tags,
           })
@@ -213,7 +208,6 @@ export async function POST(req: NextRequest) {
               agent: { prompt, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
-              webhook: { url: webhookUrl },
             },
             tags,
           })
