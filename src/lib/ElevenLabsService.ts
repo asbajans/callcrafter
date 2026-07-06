@@ -4,7 +4,7 @@ interface AgentConfig {
   name: string
   conversation_config: {
     agent: {
-      prompt: string
+      prompt: { prompt: string }
       first_message: string
       language: string
     }
@@ -143,7 +143,7 @@ export class ElevenLabsService {
       name: params.name,
       conversation_config: {
         agent: {
-          prompt: params.systemPrompt,
+          prompt: { prompt: params.systemPrompt },
           first_message: params.firstMessage,
           language: params.language,
         },

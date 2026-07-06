@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
           await el.updateAgent(a.elevenlabsAgentId, {
             name: agentName,
             conversation_config: {
-              agent: { prompt, first_message: firstMsg, language: lang },
+              agent: { prompt: { prompt }, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
             },
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
           const result = await el.createAgent({
             name: agentName,
             conversation_config: {
-              agent: { prompt, first_message: firstMsg, language: lang },
+              agent: { prompt: { prompt }, first_message: firstMsg, language: lang },
               tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
               turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
             },
