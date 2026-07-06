@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ElevenLabsService } from '@/lib/ElevenLabsService'
-import { PDFParse } from 'pdf-parse'
 
 async function getCurrentUser() {
   const { cookies } = await import('next/headers')
@@ -81,10 +80,11 @@ export async function POST(req: NextRequest) {
       const fileName = file.name.toLowerCase()
       if (fileName.endsWith('.pdf')) {
         docType = 'pdf'
-        const parser = new PDFParse({ data: buffer }) as any
+        const pdfParse = await import('pdf-parse')
+        const parser = new pdfParse.PDFParse({ data: buffer }) as any
         await parser.load()
         const result = await parser.getText() as { text: string; pages: { text: string }[] }
-        textContent = result.text || result.pages.map((p: any) => p.text).join('\n')
+        textContent = result.text || (result.pages || []).map((p: any) => p.text).join('\n')
       } else {
         textContent = buffer.toString('utf-8')
         if (fileName.endsWith('.csv')) docType = 'csv'
