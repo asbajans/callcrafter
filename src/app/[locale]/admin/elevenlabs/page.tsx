@@ -101,6 +101,11 @@ export default function AdminElevenLabsPage() {
   const [testCallForm, setTestCallForm] = useState<Record<number, string>>({});
   const [callingId, setCallingId] = useState<number | null>(null);
 
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocText, setNewDocText] = useState('');
+  const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
   const addApiError = useCallback((message: string) => {
     setApiErrors(prev => [{ time: new Date().toLocaleTimeString('tr-TR'), message }, ...prev].slice(0, 10))
   }, [])
@@ -207,6 +212,36 @@ export default function AdminElevenLabsPage() {
       fetchKbDocs();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'KB sync failed') }
     finally { setKbLoading(false) }
+  };
+
+  const handleUploadDoc = async () => {
+    let textContent = newDocText.trim();
+    if (!textContent && newDocFile) {
+      textContent = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsText(newDocFile);
+      });
+    }
+    if (!textContent) { toast.error('Metin girin veya dosya seçin'); return }
+    setUploadingDoc(true);
+    try {
+      const res = await fetch('/api/admin/elevenlabs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'upload-doc', text: textContent, name: newDocName || newDocFile?.name || 'Untitled' }),
+      });
+      const data = await res.json();
+      if (!res.ok) { addApiError(data.error); throw new Error(data.error) }
+      toast.success(`Belge yüklendi: ${data.kbDocId}`);
+      setNewDocName('');
+      setNewDocText('');
+      setNewDocFile(null);
+      fetchKbDocs();
+    } catch (err: any) { toast.error(err.message) }
+    finally { setUploadingDoc(false) }
   };
 
   const handleDeleteKbDoc = async (docId: string) => {
@@ -444,9 +479,37 @@ export default function AdminElevenLabsPage() {
           </div>
         </button>
         {showKb && (
-          <div className="border-t border-slate-100 px-6 py-4">
+          <div className="border-t border-slate-100 px-6 py-4 space-y-4">
+            {/* Upload form */}
+            <div className="bg-slate-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-indigo-500" />
+                Yeni Bilgi Belgesi Ekle
+              </h3>
+              <div className="space-y-3">
+                <input type="text" placeholder="Belge adı" value={newDocName}
+                  onChange={e => setNewDocName(e.target.value)}
+                  className="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg" />
+                <textarea placeholder="Metin içeriğini yapıştırın..." value={newDocText}
+                  onChange={e => setNewDocText(e.target.value)}
+                  className="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg min-h-[80px]" />
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm px-3 py-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                    <input type="file" accept=".txt,.csv,.html,.json" className="hidden"
+                      onChange={e => setNewDocFile(e.target.files?.[0] || null)} />
+                    {newDocFile ? newDocFile.name : 'Dosya Seç (.txt, .csv, .html, .json)'}
+                  </label>
+                  <button onClick={handleUploadDoc} disabled={uploadingDoc || (!newDocText.trim() && !newDocFile)}
+                    className="text-sm px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                    {uploadingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    Yükle
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {kbLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400 mx-auto" />
-            : kbDocs.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">Bilgi tabanında henüz belge yok. Eğitim dökümanlarını Payload admin panelinden ekleyin, ardından "Tümünü Senkronize Et" ile ElevenLabs'a yükleyin.</p>
+            : kbDocs.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">Bilgi tabanında henüz belge yok.</p>
             : <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {kbDocs.map(doc => (
                   <div key={doc.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-50 text-sm">

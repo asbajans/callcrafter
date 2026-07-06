@@ -293,6 +293,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, results })
     }
 
+    if (action === 'upload-doc') {
+      const { text, name } = body
+      if (!text) return NextResponse.json({ error: 'text gerekli' }, { status: 400 })
+      try {
+        const result = await el.createKnowledgeBaseFromText(text, name || 'Untitled')
+        return NextResponse.json({ success: true, kbDocId: result.id, name: result.name })
+      } catch (err: any) {
+        return NextResponse.json({ error: `Belge yüklenemedi: ${err.message}` }, { status: 502 })
+      }
+    }
+
     if (action === 'sync-all-training-docs') {
       const allDocs = await payload.find({
         collection: 'training-docs' as any,
