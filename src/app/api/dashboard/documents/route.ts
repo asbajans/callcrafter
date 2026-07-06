@@ -62,47 +62,11 @@ export async function POST(req: NextRequest) {
     const el = await getElevenLabsService()
     if (!el) return NextResponse.json({ error: 'ElevenLabs bağlantısı kurulamadı' }, { status: 400 })
 
-    let textContent: string | null = null
-    let docName = 'Untitled'
-    let docType = 'txt'
-    let agentId: string | null = null
-
-    const ct = req.headers.get('content-type') || ''
-    if (ct.includes('multipart/form-data') || ct.includes('form-data')) {
-      const formData = await req.formData()
-      const file = formData.get('file') as File | null
-      const name = formData.get('name') as string | null
-      agentId = formData.get('agentId') as string | null
-      if (name) docName = name
-      if (!file) return NextResponse.json({ error: 'Dosya gerekli' }, { status: 400 })
-
-      const buffer = Buffer.from(await file.arrayBuffer())
-      const fileName = file.name.toLowerCase()
-      if (fileName.endsWith('.pdf')) {
-        docType = 'pdf'
-        try {
-          const mod = await import('pdf-parse')
-          const parser = new mod.PDFParse({ data: buffer }) as any
-          await parser.load()
-          const result = await parser.getText() as { text: string }
-          textContent = result.text || ''
-        } catch {
-          textContent = ''
-        }
-      } else {
-        textContent = buffer.toString('utf-8')
-        if (fileName.endsWith('.csv')) docType = 'csv'
-        else if (fileName.endsWith('.json')) docType = 'json'
-        else if (fileName.endsWith('.html') || fileName.endsWith('.htm')) docType = 'html'
-      }
-      if (!docName || docName === 'Untitled') docName = file.name
-    } else {
-      const body = await req.json()
-      textContent = body.text || null
-      docName = body.name || 'Untitled'
-      docType = body.type || 'txt'
-      agentId = body.agentId || null
-    }
+    const body = await req.json()
+    const textContent = body.text || null
+    const docName = body.name || 'Untitled'
+    const docType = body.type || 'txt'
+    const agentId = body.agentId || null
 
     if (!textContent?.trim()) return NextResponse.json({ error: 'Metin içeriği gerekli' }, { status: 400 })
 

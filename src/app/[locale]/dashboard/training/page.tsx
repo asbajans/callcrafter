@@ -93,26 +93,39 @@ export default function TrainingPage() {
         return;
       }
 
-      if (!file && !textContent.trim()) {
-        toast.error('Dosya seçin veya metin girin');
+      let bodyText = textContent.trim()
+      let docType = form.type
+
+      if (file) {
+        docType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'txt'
+        if (docType === 'pdf') {
+          toast.error('PDF yükleme şu an desteklenmiyor, lütfen metin girin');
+          return
+        }
+        bodyText = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsText(file)
+        })
+      }
+
+      if (!bodyText) {
+        toast.error('Metin içeriği gerekli');
         return;
       }
 
-      const formData = new FormData();
-      formData.append('name', form.name);
-      formData.append('type', form.type);
-      if (form.description) formData.append('description', form.description);
-      if (file) formData.append('file', file);
-      if (textContent.trim() && !file) {
-        formData.append('text', textContent);
+      const payload: Record<string, any> = {
+        name: form.name,
+        type: docType,
+        text: bodyText,
       }
-      if (form.agentId) {
-        formData.append('agentId', form.agentId);
-      }
+      if (form.agentId) payload.agentId = form.agentId
 
       const res = await fetch('/api/dashboard/documents', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
 
