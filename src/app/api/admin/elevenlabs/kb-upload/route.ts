@@ -24,11 +24,18 @@ export async function POST(req: NextRequest) {
     let textContent: string
 
     if (fileName.endsWith('.pdf')) {
-      const mod: any = await import('pdf-parse')
-      const parser = new mod.PDFParse({})
-      await parser.load(buffer)
-      const pages = await parser.getText()
-      textContent = (pages || []).map((p: any) => p.text || '').join('\n')
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
+      const { createRequire } = await import('module')
+      const req = createRequire(import.meta.url)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
+      const doc = await pdfjsLib.getDocument({ data: buffer }).promise
+      const pages: string[] = []
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i)
+        const content = await page.getTextContent()
+        pages.push(content.items.map((item: any) => item.str).join(' '))
+      }
+      textContent = pages.join('\n')
     } else {
       textContent = buffer.toString('utf-8')
     }

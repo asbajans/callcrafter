@@ -96,18 +96,30 @@ export default function TrainingPage() {
       let bodyText = textContent.trim()
       let docType = form.type
 
+      let isBase64 = false
       if (file) {
-        docType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'txt'
-        if (docType === 'pdf') {
-          toast.error('PDF yükleme şu an desteklenmiyor, lütfen metin girin');
-          return
+        const isPdf = file.name.toLowerCase().endsWith('.pdf')
+        docType = isPdf ? 'pdf' : 'txt'
+        if (isPdf) {
+          const buf = await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as ArrayBuffer)
+            reader.onerror = reject
+            reader.readAsArrayBuffer(file)
+          })
+          const bytes = new Uint8Array(buf)
+          let binary = ''
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+          bodyText = btoa(binary)
+          isBase64 = true
+        } else {
+          bodyText = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsText(file)
+          })
         }
-        bodyText = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve(reader.result as string)
-          reader.onerror = reject
-          reader.readAsText(file)
-        })
       }
 
       if (!bodyText) {
@@ -120,6 +132,7 @@ export default function TrainingPage() {
         type: docType,
         text: bodyText,
       }
+      if (isBase64) payload.isBase64 = true
       if (form.agentId) payload.agentId = form.agentId
 
       const res = await fetch('/api/dashboard/documents', {

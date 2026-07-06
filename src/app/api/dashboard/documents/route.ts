@@ -63,10 +63,33 @@ export async function POST(req: NextRequest) {
     if (!el) return NextResponse.json({ error: 'ElevenLabs bağlantısı kurulamadı' }, { status: 400 })
 
     const body = await req.json()
-    const textContent = body.text || null
+    let textContent = body.text || null
     const docName = body.name || 'Untitled'
-    const docType = body.type || 'txt'
+    let docType = body.type || 'txt'
     const agentId = body.agentId || null
+    const isBase64 = body.isBase64 === true
+
+    if (textContent && isBase64 && docType === 'pdf') {
+      try {
+        const binaryStr = atob(textContent)
+        const bytes = new Uint8Array(binaryStr.length)
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
+        const { createRequire } = await import('module')
+        const req = createRequire(import.meta.url)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
+        const doc = await pdfjsLib.getDocument({ data: bytes.buffer }).promise
+        const pages: string[] = []
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i)
+          const content = await page.getTextContent()
+          pages.push(content.items.map((item: any) => item.str).join(' '))
+        }
+        textContent = pages.join('\n')
+      } catch (err) {
+        textContent = null
+      }
+    }
 
     if (!textContent?.trim()) return NextResponse.json({ error: 'Metin içeriği gerekli' }, { status: 400 })
 
