@@ -80,11 +80,15 @@ export async function POST(req: NextRequest) {
       const fileName = file.name.toLowerCase()
       if (fileName.endsWith('.pdf')) {
         docType = 'pdf'
-        const pdfParse = await import('pdf-parse')
-        const parser = new pdfParse.PDFParse({ data: buffer }) as any
-        await parser.load()
-        const result = await parser.getText() as { text: string; pages: { text: string }[] }
-        textContent = result.text || (result.pages || []).map((p: any) => p.text).join('\n')
+        try {
+          const mod = await import('pdf-parse')
+          const parser = new mod.PDFParse({ data: buffer }) as any
+          await parser.load()
+          const result = await parser.getText() as { text: string }
+          textContent = result.text || ''
+        } catch {
+          textContent = ''
+        }
       } else {
         textContent = buffer.toString('utf-8')
         if (fileName.endsWith('.csv')) docType = 'csv'
