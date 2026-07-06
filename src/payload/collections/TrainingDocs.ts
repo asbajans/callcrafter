@@ -27,9 +27,13 @@ export const TrainingDocs: CollectionConfig = {
       type: 'textarea',
     },
     {
+      name: 'content',
+      type: 'textarea',
+      admin: { description: 'Direct text content for dashboard uploads' },
+    },
+    {
       name: 'type',
       type: 'select',
-      required: true,
       options: [
         { label: 'PDF', value: 'pdf' },
         { label: 'DOCX', value: 'docx' },
@@ -38,12 +42,12 @@ export const TrainingDocs: CollectionConfig = {
         { label: 'JSON', value: 'json' },
         { label: 'HTML', value: 'html' },
       ],
+      defaultValue: 'txt',
     },
     {
       name: 'file',
       type: 'upload',
       relationTo: 'media',
-      required: true,
     },
     {
       name: 'status',
