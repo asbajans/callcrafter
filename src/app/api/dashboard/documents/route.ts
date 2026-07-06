@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
               },
             })
           } catch (err: any) {
-            console.error('[documents] PDF upload to ElevenLabs failed:', err.message)
+            console.error('[documents] PDF upload error:', err.message)
             return NextResponse.json({ error: `ElevenLabs yükleme hatası: ${err.message}` }, { status: 502 })
           }
         } else {
