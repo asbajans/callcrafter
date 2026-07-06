@@ -126,6 +126,30 @@ export class ElevenLabsService {
     })
   }
 
+  async createKnowledgeBaseFromText(text: string, name?: string): Promise<{ id: string; name: string }> {
+    return this.request('POST', '/convai/knowledge-base/text', { text, name })
+  }
+
+  async listKnowledgeBaseDocuments(): Promise<any> {
+    return this.request('GET', '/convai/knowledge-base')
+  }
+
+  async deleteKnowledgeBaseDocument(docId: string): Promise<void> {
+    return this.request('DELETE', `/convai/knowledge-base/${docId}`)
+  }
+
+  async listPhoneNumbers(): Promise<any> {
+    return this.request('GET', '/convai/phone-numbers')
+  }
+
+  async deletePhoneNumber(phoneNumberId: string): Promise<void> {
+    return this.request('DELETE', `/convai/phone-numbers/${phoneNumberId}`)
+  }
+
+  async getPhoneNumber(phoneNumberId: string): Promise<any> {
+    return this.request('GET', `/convai/phone-numbers/${phoneNumberId}`)
+  }
+
   buildAgentConfig(params: {
     name: string
     systemPrompt: string
@@ -138,12 +162,31 @@ export class ElevenLabsService {
     webhookUrl?: string
     webhookSecret?: string
     tags?: string[]
+    knowledgeBaseDocs?: { type: string; id: string; name: string; usage_mode?: string }[]
+    rag?: { enabled: boolean; embedding_model?: string; max_documents_length?: number; max_retrieved_rag_chunks_count?: number }
   }): AgentConfig {
+    const promptObj: any = { prompt: params.systemPrompt }
+    if (params.knowledgeBaseDocs?.length) {
+      promptObj.knowledge_base = params.knowledgeBaseDocs.map(d => ({
+        type: d.type || 'file',
+        id: d.id,
+        name: d.name,
+        usage_mode: d.usage_mode || 'auto',
+      }))
+    }
+    if (params.rag) {
+      promptObj.rag = {
+        enabled: params.rag.enabled,
+        embedding_model: params.rag.embedding_model || 'qwen3_embedding_4b',
+        max_documents_length: params.rag.max_documents_length || 50000,
+        max_retrieved_rag_chunks_count: params.rag.max_retrieved_rag_chunks_count || 20,
+      }
+    }
     const config: AgentConfig = {
       name: params.name,
       conversation_config: {
         agent: {
-          prompt: { prompt: params.systemPrompt },
+          prompt: promptObj,
           first_message: params.firstMessage,
           language: params.language,
         },

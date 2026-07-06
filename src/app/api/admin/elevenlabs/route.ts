@@ -79,10 +79,20 @@ export async function GET(req: NextRequest) {
     if (action === 'phone-numbers') {
       if (!el) return NextResponse.json({ phoneNumbers: [] })
       try {
-        const data = await el.listAgents()
+        const data = await el.listPhoneNumbers()
         return NextResponse.json({ phoneNumbers: data.phone_numbers || [] })
       } catch (err: any) {
         return NextResponse.json({ error: err.message, phoneNumbers: [] })
+      }
+    }
+
+    if (action === 'knowledge-base') {
+      if (!el) return NextResponse.json({ documents: [] })
+      try {
+        const data = await el.listKnowledgeBaseDocuments()
+        return NextResponse.json({ documents: data.documents || [] })
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message, documents: [] })
       }
     }
 
@@ -181,37 +191,47 @@ export async function POST(req: NextRequest) {
       const voiceId = elevenlabsVoiceId || a.voiceTemplate || a.elevenlabsVoice || '21m00Tcm4TlvDq8ikWAM'
       const firstMsg = a.greetingMessage || 'Merhaba, size nasıl yardımcı olabilirim?'
       const lang = (a.language || 'tr').toLowerCase()
-      const prompt = a.systemPrompt || 'Sen yardımsever bir AI asistanısın.'
+      const promptText = a.systemPrompt || 'Sen yardımsever bir AI asistanısın.'
 
       try {
-        if (a.elevenlabsAgentId) {
-          await el.updateAgent(a.elevenlabsAgentId, {
-            name: agentName,
-            conversation_config: {
-              agent: { prompt: { prompt }, first_message: firstMsg, language: lang },
-              tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
-              turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
-            },
-            tags,
-          })
+        const promptObj: any = { prompt: promptText }
 
+        const trainingDocs = await payload.find({
+          collection: 'training-docs' as any,
+          where: { agent: { equals: agentId } },
+          limit: 50,
+          depth: 1,
+        })
+        const kbDocs = (trainingDocs.docs || []).filter((d: any) => d.elevenlabsKbDocId)
+        if (kbDocs.length > 0) {
+          promptObj.knowledge_base = kbDocs.map((d: any) => ({
+            type: 'file',
+            id: d.elevenlabsKbDocId,
+            name: d.name || 'Training Document',
+            usage_mode: 'auto',
+          }))
+        }
+
+        const config: any = {
+          name: agentName,
+          conversation_config: {
+            agent: { prompt: promptObj, first_message: firstMsg, language: lang },
+            tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
+            turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
+          },
+          tags,
+        }
+
+        let result: any
+        if (a.elevenlabsAgentId) {
+          await el.updateAgent(a.elevenlabsAgentId, config)
+          result = { agent_id: a.elevenlabsAgentId }
           await payload.update({
             collection: 'agents', id: agentId,
             data: { elevenlabsVoice: voiceId, elevenlabsLanguage: lang } as any,
           })
-
-          return NextResponse.json({ success: true, action: 'updated', agentId: a.elevenlabsAgentId, voiceId })
         } else {
-          const result = await el.createAgent({
-            name: agentName,
-            conversation_config: {
-              agent: { prompt: { prompt }, first_message: firstMsg, language: lang },
-              tts: { voice_id: voiceId, model_id: a.elevenlabsModel || 'eleven_multilingual_v2' },
-              turn: { turn_timeout: a.elevenlabsTurnTimeout || 10 },
-            },
-            tags,
-          })
-
+          result = await el.createAgent(config)
           await payload.update({
             collection: 'agents', id: agentId,
             data: {
@@ -219,13 +239,144 @@ export async function POST(req: NextRequest) {
               elevenlabsLanguage: lang, voiceEngine: 'elevenlabs',
             } as any,
           })
-
-          return NextResponse.json({ success: true, action: 'created', agentId: result.agent_id, voiceId })
         }
+
+        return NextResponse.json({
+          success: true,
+          action: a.elevenlabsAgentId ? 'updated' : 'created',
+          agentId: result.agent_id,
+          voiceId,
+          kbDocCount: kbDocs.length,
+        })
       } catch (err: any) {
         return NextResponse.json({
           error: `ElevenLabs API hatası: ${err.message}`,
         }, { status: 502 })
+      }
+    }
+
+    if (action === 'sync-training-docs') {
+      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 1 }) as any
+      if (!agent) {
+        return NextResponse.json({ error: 'Agent bulunamadı' }, { status: 404 })
+      }
+
+      const trainingDocs = await payload.find({
+        collection: 'training-docs' as any,
+        where: { agent: { equals: agentId } },
+        limit: 50,
+        depth: 1,
+      })
+
+      const results: any[] = []
+      for (const doc of (trainingDocs.docs || [])) {
+        const d = doc as any
+        try {
+          if (d.elevenlabsKbDocId) {
+            results.push({ id: d.id, name: d.name, status: 'already_synced', kbDocId: d.elevenlabsKbDocId })
+            continue
+          }
+          let textContent = d.name || 'Untitled'
+          if (d.description) textContent += '\n\n' + d.description
+          const kbResult = await el.createKnowledgeBaseFromText(textContent, d.name || 'Training Document')
+          await payload.update({
+            collection: 'training-docs' as any,
+            id: d.id,
+            data: { elevenlabsKbDocId: kbResult.id } as any,
+          })
+          results.push({ id: d.id, name: d.name, status: 'created', kbDocId: kbResult.id })
+        } catch (err: any) {
+          results.push({ id: d.id, name: d.name, status: 'error', error: err.message })
+        }
+      }
+
+      return NextResponse.json({ success: true, results })
+    }
+
+    if (action === 'sync-all-training-docs') {
+      const allDocs = await payload.find({
+        collection: 'training-docs' as any,
+        limit: 200,
+        depth: 0,
+      })
+
+      const results: any[] = []
+      for (const doc of (allDocs.docs || [])) {
+        const d = doc as any
+        try {
+          if (d.elevenlabsKbDocId) continue
+          let textContent = d.name || 'Untitled'
+          if (d.description) textContent += '\n\n' + d.description
+          const kbResult = await el.createKnowledgeBaseFromText(textContent, d.name || 'Training Document')
+          await payload.update({
+            collection: 'training-docs' as any,
+            id: d.id,
+            data: { elevenlabsKbDocId: kbResult.id } as any,
+          })
+          results.push({ id: d.id, name: d.name, status: 'created', kbDocId: kbResult.id })
+        } catch (err: any) {
+          results.push({ id: d.id, name: d.name, status: 'error', error: err.message })
+        }
+      }
+
+      return NextResponse.json({ success: true, total: allDocs.docs.length, created: results.length, results })
+    }
+
+    if (action === 'import-phone') {
+      const { phoneNumber, twilioAccountSid, twilioAuthToken } = body
+      if (!phoneNumber || !twilioAccountSid || !twilioAuthToken) {
+        return NextResponse.json({ error: 'phoneNumber, twilioAccountSid, twilioAuthToken gerekli' }, { status: 400 })
+      }
+      try {
+        const result = await el.importTwilioPhoneNumber(phoneNumber, twilioAccountSid, twilioAuthToken)
+        return NextResponse.json({ success: true, phoneNumber: result })
+      } catch (err: any) {
+        return NextResponse.json({ error: `Telefon numarası içe aktarılamadı: ${err.message}` }, { status: 502 })
+      }
+    }
+
+    if (action === 'link-phone') {
+      const { phoneNumberId, elevenlabsAgentId: targetAgentId } = body
+      if (!phoneNumberId || !targetAgentId) {
+        return NextResponse.json({ error: 'phoneNumberId ve elevenlabsAgentId gerekli' }, { status: 400 })
+      }
+      try {
+        await el.linkPhoneToAgent(phoneNumberId, targetAgentId)
+        if (agentId) {
+          await payload.update({
+            collection: 'agents', id: agentId,
+            data: { elevenlabsPhoneNumberId: phoneNumberId } as any,
+          })
+        }
+        return NextResponse.json({ success: true })
+      } catch (err: any) {
+        return NextResponse.json({ error: `Telefon bağlanamadı: ${err.message}` }, { status: 502 })
+      }
+    }
+
+    if (action === 'test-call') {
+      const { phoneNumberId: callPhoneNumberId, toNumber } = body
+      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 }) as any
+      if (!agent?.elevenlabsAgentId) {
+        return NextResponse.json({ error: 'Agent ElevenLabs ile senkronize değil' }, { status: 400 })
+      }
+      const sourcePhoneNumberId = callPhoneNumberId || agent.elevenlabsPhoneNumberId
+      if (!sourcePhoneNumberId) {
+        return NextResponse.json({ error: 'Kaynak telefon numarası gerekli' }, { status: 400 })
+      }
+      if (!toNumber) {
+        return NextResponse.json({ error: 'Hedef numara gerekli' }, { status: 400 })
+      }
+      try {
+        const result = await el.createOutboundCall(
+          agent.elevenlabsAgentId,
+          sourcePhoneNumberId,
+          toNumber,
+          { firstMessage: agent.greetingMessage, language: agent.elevenlabsLanguage || 'tr' },
+        )
+        return NextResponse.json({ success: true, call: result })
+      } catch (err: any) {
+        return NextResponse.json({ error: `Çağrı başlatılamadı: ${err.message}` }, { status: 502 })
       }
     }
 
@@ -242,7 +393,21 @@ export async function DELETE(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { agentId } = body
+  const { action, agentId, documentId } = body
+  const el = await getElevenLabsService()
+  if (!el) {
+    return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı' }, { status: 400 })
+  }
+
+  if (action === 'delete-kb-doc') {
+    if (!documentId) return NextResponse.json({ error: 'documentId gerekli' }, { status: 400 })
+    try {
+      await el.deleteKnowledgeBaseDocument(documentId)
+      return NextResponse.json({ success: true })
+    } catch (err: any) {
+      return NextResponse.json({ error: `KB belgesi silinemedi: ${err.message}` }, { status: 500 })
+    }
+  }
 
   if (!agentId) {
     return NextResponse.json({ error: 'agentId gerekli' }, { status: 400 })
@@ -256,11 +421,6 @@ export async function DELETE(req: NextRequest) {
 
   if (!agent.elevenlabsAgentId) {
     return NextResponse.json({ error: 'Bu agent ElevenLabs ile senkronize değil' }, { status: 400 })
-  }
-
-  const el = await getElevenLabsService()
-  if (!el) {
-    return NextResponse.json({ error: 'ElevenLabs API anahtarı bulunamadı' }, { status: 400 })
   }
 
   try {
