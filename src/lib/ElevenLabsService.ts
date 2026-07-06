@@ -130,6 +130,36 @@ export class ElevenLabsService {
     return this.request('POST', '/convai/knowledge-base/text', { text, name })
   }
 
+  async createKnowledgeBaseFromFile(fileBuffer: Buffer, fileName: string): Promise<{ id: string; name: string }> {
+    const url = `${ELEVENLABS_API_BASE}/convai/knowledge-base/file`
+    const boundary = `----FormBoundary${Date.now()}`
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/pdf\r\n\r\n`
+    const footer = `\r\n--${boundary}--\r\n`
+    const body = Buffer.concat([
+      Buffer.from(header, 'utf-8'),
+      fileBuffer,
+      Buffer.from(footer, 'utf-8'),
+    ])
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60000)
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': this.apiKey,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`ElevenLabs API error (${res.status}): ${text}`)
+    }
+    return res.json()
+  }
+
   async listKnowledgeBaseDocuments(): Promise<any> {
     return this.request('GET', '/convai/knowledge-base')
   }

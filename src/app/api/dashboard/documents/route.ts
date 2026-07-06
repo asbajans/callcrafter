@@ -54,25 +54,6 @@ export async function GET() {
   }
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string | null> {
-  try {
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
-    const { createRequire } = await import('module')
-    const req = createRequire(import.meta.url)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
-    const doc = await pdfjsLib.getDocument({ data: buffer }).promise
-    const pages: string[] = []
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
-      const content = await page.getTextContent()
-      pages.push(content.items.map((item: any) => item.str).join(' '))
-    }
-    return pages.join('\n')
-  } catch {
-    return null
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -100,7 +81,38 @@ export async function POST(req: NextRequest) {
         const fileName = file.name.toLowerCase()
         if (fileName.endsWith('.pdf')) {
           docType = 'pdf'
-          textContent = await extractPdfText(buffer)
+          try {
+            const kbDoc = await el.createKnowledgeBaseFromFile(buffer, file.name)
+            textContent = `[PDF uploaded to ElevenLabs KB: ${kbDoc.id}]`
+            docName = file.name
+            const payload = await getPayload({ config })
+            const docData: any = {
+              tenant: user.tenantId,
+              name: file.name,
+              type: docType,
+              content: `[PDF: ${file.name}]`,
+              elevenlabsKbDocId: kbDoc.id,
+              status: 'ready',
+            }
+            if (agentId) docData.agent = parseInt(agentId, 10)
+            const created = await payload.create({
+              collection: 'training-docs' as any,
+              data: docData,
+            })
+            return NextResponse.json({
+              success: true,
+              document: {
+                id: (created as any).id,
+                name: file.name,
+                type: docType,
+                elevenlabsKbDocId: kbDoc.id,
+                agentId: agentId ? parseInt(agentId, 10) : null,
+                createdAt: (created as any).createdAt,
+              },
+            })
+          } catch (err: any) {
+            return NextResponse.json({ error: `ElevenLabs yükleme hatası: ${err.message}` }, { status: 502 })
+          }
         } else {
           textContent = buffer.toString('utf-8')
           if (fileName.endsWith('.csv')) docType = 'csv'
@@ -111,16 +123,6 @@ export async function POST(req: NextRequest) {
       } else if (textField?.trim()) {
         textContent = textField
         docType = formData.get('type') as string || 'txt'
-      }
-    } else {
-      const body = await req.json()
-      textContent = body.text || null
-      docName = body.name || 'Untitled'
-      docType = body.type || 'txt'
-      agentId = body.agentId || null
-
-      if (textContent && body.isBase64 && docType === 'pdf') {
-        textContent = await extractPdfText(Buffer.from(textContent, 'base64'))
       }
     }
 

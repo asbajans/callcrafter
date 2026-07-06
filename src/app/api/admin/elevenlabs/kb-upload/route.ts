@@ -24,18 +24,8 @@ export async function POST(req: NextRequest) {
     let textContent: string
 
     if (fileName.endsWith('.pdf')) {
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
-      const { createRequire } = await import('module')
-      const req = createRequire(import.meta.url)
-      pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
-      const doc = await pdfjsLib.getDocument({ data: buffer }).promise
-      const pages: string[] = []
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i)
-        const content = await page.getTextContent()
-        pages.push(content.items.map((item: any) => item.str).join(' '))
-      }
-      textContent = pages.join('\n')
+      const result = await el.createKnowledgeBaseFromFile(buffer, file.name)
+      return NextResponse.json({ success: true, kbDocId: result.id, name: result.name })
     } else {
       textContent = buffer.toString('utf-8')
     }
