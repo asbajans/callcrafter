@@ -4,13 +4,11 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   FileText, Plus, Trash2, X, Loader2, AlertCircle,
-  File, CheckCircle, Clock, AlertTriangle,
+  File, CheckCircle, Clock, AlertTriangle, Bot,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, getUser } from '@/lib/api';
+import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
-import config from '../../../../../payload.config';
-import { getPayload } from 'payload';
 
 const typeIcons: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -22,24 +20,25 @@ const typeIcons: Record<string, typeof FileText> = {
 };
 
 const typeColors: Record<string, string> = {
-  pdf: 'bg-red-100 text-red-700',
-  docx: 'bg-blue-100 text-blue-700',
-  txt: 'bg-slate-800 text-slate-700',
-  csv: 'bg-green-100 text-green-700',
-  json: 'bg-amber-100 text-amber-700',
-  html: 'bg-purple-100 text-purple-700',
+  pdf: 'bg-red-500/10 text-red-400',
+  docx: 'bg-blue-500/10 text-blue-400',
+  txt: 'bg-slate-500/10 text-slate-400',
+  csv: 'bg-green-500/10 text-green-400',
+  json: 'bg-amber-500/10 text-amber-400',
+  html: 'bg-purple-500/10 text-purple-400',
 };
 
 const statusConfig: Record<string, { icon: typeof Clock; color: string }> = {
-  pending: { icon: Clock, color: 'bg-slate-800 text-slate-300' },
-  processing: { icon: Loader2, color: 'bg-blue-100 text-blue-700' },
-  ready: { icon: CheckCircle, color: 'bg-emerald-100 text-emerald-700' },
-  error: { icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
+  pending: { icon: Clock, color: 'bg-slate-500/10 text-slate-400' },
+  processing: { icon: Loader2, color: 'bg-blue-500/10 text-blue-400' },
+  ready: { icon: CheckCircle, color: 'bg-emerald-500/10 text-emerald-400' },
+  error: { icon: AlertTriangle, color: 'bg-red-500/10 text-red-400' },
 };
 
 export default function TrainingPage() {
   const t = useTranslations();
   const [data, setData] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -47,17 +46,25 @@ export default function TrainingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     name: '',
-    type: 'pdf',
+    type: 'txt',
     description: '',
+    agentId: '',
   });
   const [file, setFile] = useState<File | null>(null);
+  const [textContent, setTextContent] = useState('');
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.getTrainingDocs();
-      setData(res.docs || []);
+      const res = await fetch('/api/dashboard/documents');
+      if (res.ok) {
+        const d = await res.json();
+        setData(d.documents || []);
+      } else {
+        const docs = await api.getTrainingDocs();
+        setData(docs.docs || []);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load training documents');
     } finally {
@@ -65,22 +72,29 @@ export default function TrainingPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  const fetchAgents = async () => {
+    try {
+      const res = await api.getAgents();
+      setAgents(res.docs || []);
+    } catch { /* non-critical */ }
+  };
+
+  useEffect(() => {
+    fetchData();
+    fetchAgents();
+  }, []);
 
   const handleCreate = async () => {
     try {
       setSubmitting(true);
-      
-      // Validate user authentication
-      const currentUser = getUser();
-      if (!currentUser) {
-        toast.error('You must be logged in to upload documents');
+
+      if (!form.name.trim()) {
+        toast.error('Döküman adı gerekli');
         return;
       }
-      
-      // Validate tenant
-      if (!currentUser.tenant) {
-        toast.error('No tenant associated with your account');
+
+      if (!file && !textContent.trim()) {
+        toast.error('Dosya seçin veya metin girin');
         return;
       }
 
@@ -89,28 +103,33 @@ export default function TrainingPage() {
       formData.append('type', form.type);
       if (form.description) formData.append('description', form.description);
       if (file) formData.append('file', file);
-      formData.append('agentId', currentUser.id); // Pass current user ID as agentId
-      formData.append('tenantId', currentUser.tenant as string); // Pass tenant ID
+      if (textContent.trim() && !file) {
+        formData.append('text', textContent);
+      }
+      if (form.agentId) {
+        formData.append('agentId', form.agentId);
+      }
 
-      const res = await fetch('/api/training-docs', {
+      const res = await fetch('/api/dashboard/documents', {
         method: 'POST',
         body: formData,
-        credentials: 'include', // Include cookies
+        credentials: 'include',
       });
-      
+
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || 'Upload failed');
+        const errData = await res.json();
+        throw new Error(errData.error || 'Yükleme başarısız');
       }
-      
-      toast.success('Document uploaded successfully');
+
+      toast.success('Döküman başarıyla yüklendi');
       setShowModal(false);
-      setForm({ name: '', type: 'pdf', description: '' });
+      setForm({ name: '', type: 'txt', description: '', agentId: '' });
       setFile(null);
+      setTextContent('');
       await fetchData();
     } catch (err: any) {
       console.error('Upload error:', err);
-      toast.error(err.message || 'Failed to upload document');
+      toast.error(err.message || 'Döküman yüklenirken hata oluştu');
     } finally {
       setSubmitting(false);
     }
@@ -118,12 +137,16 @@ export default function TrainingPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      await api.deleteTrainingDoc(id);
-      toast.success('Document deleted');
+      const res = await fetch(`/api/dashboard/documents?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error);
+      }
+      toast.success('Döküman silindi');
       setDeleteId(null);
       await fetchData();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete document');
+      toast.error(err.message || 'Döküman silinirken hata oluştu');
     }
   };
 
@@ -140,7 +163,7 @@ export default function TrainingPage() {
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <AlertCircle className="w-10 h-10 text-red-400" />
         <p className="text-slate-300">{error}</p>
-        <button onClick={fetchData} className="text-indigo-600 text-sm font-medium hover:text-indigo-800">Try again</button>
+        <button onClick={fetchData} className="text-indigo-400 text-sm font-medium hover:text-indigo-300">Tekrar Dene</button>
       </div>
     );
   }
@@ -150,55 +173,62 @@ export default function TrainingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">{t('dashboard.training')}</h1>
-          <p className="text-slate-500 mt-1">Manage training documents for your AI agents</p>
+          <p className="text-slate-500 mt-1">AI asistanlarınız için eğitim dökümanlarını yönetin</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors flex items-center gap-2"
+          className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-500 transition-colors flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          Upload Document
+          Döküman Yükle
         </button>
       </div>
 
       {data.length === 0 ? (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 text-sm">{t('common.noData')}</p>
+        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-12 text-center">
+          <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <p className="text-slate-500 text-sm">Henüz döküman yüklenmemiş</p>
         </div>
       ) : (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-700/50 bg-slate-800">
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Chunks</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Created</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider" />
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Ad</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Tür</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Asistan</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Durum</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Oluşturulma</th>
+                <th className="text-right px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-white/[0.06]">
               {data.map((item: any) => {
                 const TypeIcon = typeIcons[item.type] || File;
                 const cfg = statusConfig[item.status] || statusConfig.pending;
                 const StatusIcon = cfg.icon;
                 return (
-                  <tr key={item.id} className="hover:bg-slate-800 transition-colors">
-                    <td className="px-6 py-4">
+                  <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-4">
                       <span className="text-sm font-medium text-white">{item.name}</span>
-                      {item.description && (
-                        <p className="text-xs text-slate-400 mt-0.5">{item.description}</p>
-                      )}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${typeColors[item.type] || 'bg-slate-800 text-slate-300'}`}>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${typeColors[item.type] || 'bg-slate-500/10 text-slate-400'}`}>
                         <TypeIcon className="w-3.5 h-3.5" />
                         {item.type ? item.type.toUpperCase() : '—'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
+                      {item.agentName ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-slate-300">
+                          <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                          {item.agentName}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
                       <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.color}`}>
                         {item.status === 'processing' ? (
                           <StatusIcon className="w-3.5 h-3.5 animate-spin" />
@@ -208,12 +238,11 @@ export default function TrainingPage() {
                         {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : '—'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-300">{item.chunkCount ?? item.vectorCount ?? '—'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-500">{item.createdAt ? formatDate(item.createdAt) : '—'}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-5 py-4 text-sm text-slate-500">{item.createdAt ? formatDate(item.createdAt) : '—'}</td>
+                    <td className="px-5 py-4 text-right">
                       <button
                         onClick={() => setDeleteId(item.id)}
-                        className="text-red-400 hover:text-red-600 transition-colors p-1"
+                        className="text-red-400 hover:text-red-300 transition-colors p-1"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -227,84 +256,83 @@ export default function TrainingPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-slate-800 rounded-xl w-full max-w-lg mx-4 p-6 shadow-xl border border-slate-700/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-lg mx-4 p-6 shadow-xl border border-white/[0.1]">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white">Upload Document</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-300">
+              <h2 className="text-lg font-semibold text-white">Döküman Yükle</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-slate-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">Döküman Adı</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Product Knowledge Base"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  placeholder="Ürün Bilgi Bankası"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.06] text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Optional description"
-                  rows={2}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">Asistan (isteğe bağlı)</label>
                 <select
-                  value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  value={form.agentId}
+                  onChange={(e) => setForm({ ...form, agentId: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.06] text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                 >
-                  <option value="pdf">PDF</option>
-                  <option value="docx">DOCX</option>
-                  <option value="txt">TXT</option>
-                  <option value="csv">CSV</option>
-                  <option value="json">JSON</option>
-                  <option value="html">HTML</option>
+                  <option value="">Asistan seçilmedi</option>
+                  {agents.map((agent: any) => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
                 </select>
+                <p className="text-xs text-slate-600 mt-1">Seçilen asistana ElevenLabs üzerinde otomatik bağlanır</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">File</label>
-                <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-slate-300 rounded-lg px-4 py-6 cursor-pointer hover:border-indigo-400 transition-colors">
-                  <FileText className="w-8 h-8 text-slate-400 mb-2" />
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">Dosya</label>
+                <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-white/[0.1] rounded-xl px-4 py-6 cursor-pointer hover:border-indigo-500/50 transition-colors bg-white/[0.03]">
+                  <FileText className="w-8 h-8 text-slate-500 mb-2" />
                   {file ? (
-                    <span className="text-sm text-indigo-600 font-medium">{file.name}</span>
+                    <span className="text-sm text-indigo-400 font-medium">{file.name}</span>
                   ) : (
                     <>
-                      <span className="text-sm text-slate-500">Click to select a file</span>
-                      <span className="text-xs text-slate-400 mt-1">PDF, DOCX, TXT, CSV, JSON, HTML</span>
+                      <span className="text-sm text-slate-500">Dosya seçmek için tıklayın</span>
+                      <span className="text-xs text-slate-600 mt-1">TXT, CSV, JSON, HTML, PDF</span>
                     </>
                   )}
                   <input
                     type="file"
                     className="hidden"
                     onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    accept=".pdf,.docx,.txt,.csv,.json,.html"
+                    accept=".txt,.csv,.json,.html,.pdf"
                   />
                 </label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">veya Metin İçeriği</label>
+                <textarea
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  placeholder="Metin içeriğini buraya yapıştırın..."
+                  rows={4}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.06] text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 resize-none"
+                />
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
               >
-                {t('common.cancel')}
+                İptal
               </button>
               <button
                 onClick={handleCreate}
-                disabled={submitting || !form.name || !file}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                disabled={submitting || !form.name.trim() || (!file && !textContent.trim())}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Upload
+                Yükle
               </button>
             </div>
           </div>
@@ -312,16 +340,16 @@ export default function TrainingPage() {
       )}
 
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-slate-800 rounded-xl w-full max-w-sm mx-4 p-6 shadow-xl border border-slate-700/50">
-            <h2 className="text-lg font-semibold text-white mb-2">Confirm Delete</h2>
-            <p className="text-sm text-slate-300 mb-6">Are you sure you want to delete this document?</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-sm mx-4 p-6 shadow-xl border border-white/[0.1]">
+            <h2 className="text-lg font-semibold text-white mb-2">Dökümanı Sil</h2>
+            <p className="text-sm text-slate-400 mb-6">Bu dökümanı silmek istediğinize emin misiniz?</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
-                {t('common.cancel')}
+              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                İptal
               </button>
-              <button onClick={() => handleDelete(deleteId)} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition-colors">
-                {t('common.delete')}
+              <button onClick={() => handleDelete(deleteId)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors">
+                Sil
               </button>
             </div>
           </div>

@@ -43,6 +43,8 @@ export async function GET() {
       name: d.name,
       type: d.type || 'txt',
       elevenlabsKbDocId: d.elevenlabsKbDocId || null,
+      agentName: d.agent?.name || null,
+      agentId: d.agent?.id || null,
       createdAt: d.createdAt,
     }))
 
@@ -63,12 +65,14 @@ export async function POST(req: NextRequest) {
     let textContent: string | null = null
     let docName = 'Untitled'
     let docType = 'txt'
+    let agentId: string | null = null
 
     const ct = req.headers.get('content-type') || ''
     if (ct.includes('multipart/form-data') || ct.includes('form-data')) {
       const formData = await req.formData()
       const file = formData.get('file') as File | null
       const name = formData.get('name') as string | null
+      agentId = formData.get('agentId') as string | null
       if (name) docName = name
       if (!file) return NextResponse.json({ error: 'Dosya gerekli' }, { status: 400 })
 
@@ -93,6 +97,7 @@ export async function POST(req: NextRequest) {
       textContent = body.text || null
       docName = body.name || 'Untitled'
       docType = body.type || 'txt'
+      agentId = body.agentId || null
     }
 
     if (!textContent?.trim()) return NextResponse.json({ error: 'Metin içeriği gerekli' }, { status: 400 })
@@ -100,16 +105,20 @@ export async function POST(req: NextRequest) {
     const kbResult = await el.createKnowledgeBaseFromText(textContent, docName)
 
     const payload = await getPayload({ config })
+    const docData: any = {
+      tenant: user.tenantId,
+      name: docName,
+      type: docType,
+      content: textContent,
+      elevenlabsKbDocId: kbResult.id,
+      status: 'ready',
+    }
+    if (agentId) {
+      docData.agent = parseInt(agentId, 10)
+    }
     const created = await payload.create({
       collection: 'training-docs' as any,
-      data: {
-        tenant: user.tenantId,
-        name: docName,
-        type: docType,
-        content: textContent,
-        elevenlabsKbDocId: kbResult.id,
-        status: 'ready',
-      } as any,
+      data: docData,
     })
 
     return NextResponse.json({
@@ -119,6 +128,7 @@ export async function POST(req: NextRequest) {
         name: docName,
         type: docType,
         elevenlabsKbDocId: kbResult.id,
+        agentId: agentId ? parseInt(agentId, 10) : null,
         createdAt: (created as any).createdAt,
       },
     })

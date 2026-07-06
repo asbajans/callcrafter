@@ -23,9 +23,6 @@ import {
   Globe,
   Play,
   MessageSquare,
-  BookOpen,
-  Upload,
-  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AgentTestModal from '../../admin/agents/AgentTestModal';
@@ -634,11 +631,6 @@ export default function AgentsPage() {
   const [planLimits, setPlanLimits] = useState<any>(null);
   const [elevenlabsVoices, setElevenlabsVoices] = useState<{ id: string; name: string; language?: string | null }[]>([]);
   const [kbDocs, setKbDocs] = useState<{ id: string; name: string }[]>([]);
-  const [documents, setDocuments] = useState<{ id: string; name: string; type: string; elevenlabsKbDocId: string | null; createdAt: string }[]>([]);
-  const [uploadName, setUploadName] = useState('');
-  const [uploadText, setUploadText] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -695,61 +687,23 @@ export default function AgentsPage() {
     } catch { /* non-critical */ }
   }, []);
 
-  const fetchDocuments = useCallback(async () => {
+  const fetchKbDocs = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/documents');
       if (res.ok) {
         const data = await res.json();
-        setDocuments(data.documents || []);
         setKbDocs((data.documents || []).filter((d: any) => d.elevenlabsKbDocId).map((d: any) => ({ id: d.elevenlabsKbDocId, name: d.name })));
       }
     } catch { /* non-critical */ }
   }, []);
-
-  const handleUploadDoc = async () => {
-    let text = uploadText.trim()
-    if (!text && uploadFile) {
-      text = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsText(uploadFile)
-      })
-    }
-    if (!text) { toast.error('Metin girin veya dosya seçin'); return }
-    setUploading(true)
-    try {
-      const res = await fetch('/api/dashboard/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, name: uploadName || uploadFile?.name || 'Untitled', type: uploadFile?.name?.endsWith('.pdf') ? 'pdf' : 'txt' }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      toast.success('Belge yüklendi')
-      setUploadName(''); setUploadText(''); setUploadFile(null)
-      fetchDocuments()
-    } catch (err: any) { toast.error(err.message) }
-    finally { setUploading(false) }
-  };
-
-  const handleDeleteDoc = async (docId: string) => {
-    if (!confirm('Bu belgeyi silmek istediğinize emin misiniz?')) return
-    try {
-      const res = await fetch(`/api/dashboard/documents?id=${docId}`, { method: 'DELETE' })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
-      toast.success('Belge silindi')
-      fetchDocuments()
-    } catch (err: any) { toast.error(err.message) }
-  };
 
   useEffect(() => {
     fetchAgents();
     fetchProviders();
     fetchPlanLimits();
     fetchVoices();
-    fetchDocuments();
-  }, [fetchAgents, fetchProviders, fetchPlanLimits, fetchVoices, fetchDocuments]);
+    fetchKbDocs();
+  }, [fetchAgents, fetchProviders, fetchPlanLimits, fetchVoices, fetchKbDocs]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -990,60 +944,6 @@ export default function AgentsPage() {
           </div>
         </div>
       )}
-
-      {/* Document Management */}
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/[0.06]">
-          <h2 className="text-base font-semibold text-white flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-indigo-400" />
-            Döküman Yönetimi
-          </h2>
-        </div>
-        <div className="px-5 py-4 space-y-4">
-          {/* Upload Form */}
-          <div className="bg-white/[0.03] rounded-xl p-4 space-y-3">
-            <input type="text" placeholder="Döküman adı" value={uploadName}
-              onChange={e => setUploadName(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-white/[0.06] border border-white/[0.1] rounded-xl text-slate-100 placeholder-slate-600" />
-            <textarea placeholder="Metin içeriğini yapıştırın veya dosya seçin..." value={uploadText}
-              onChange={e => setUploadText(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-white/[0.06] border border-white/[0.1] rounded-xl text-slate-100 placeholder-slate-600 min-h-[60px]" />
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm px-3 py-2 bg-white/[0.06] border border-white/[0.1] rounded-xl cursor-pointer hover:bg-white/[0.1] text-slate-300">
-                <input type="file" accept=".txt,.csv,.html,.json,.pdf" className="hidden"
-                  onChange={e => setUploadFile(e.target.files?.[0] || null)} />
-                {uploadFile ? uploadFile.name : 'Dosya Seç'}
-              </label>
-              <button onClick={handleUploadDoc} disabled={uploading || (!uploadText.trim() && !uploadFile)}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl disabled:opacity-50 flex items-center gap-1.5">
-                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                Yükle
-              </button>
-            </div>
-          </div>
-
-          {/* Document List */}
-          {documents.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs text-slate-500 font-medium">{documents.length} döküman</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {documents.map(doc => (
-                  <div key={doc.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-sm">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate text-slate-300">{doc.name}</span>
-                      <span className="text-[10px] text-slate-600 uppercase">{doc.type}</span>
-                    </div>
-                    <button onClick={() => handleDeleteDoc(doc.id)} className="p-1 text-slate-500 hover:text-red-400 shrink-0">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
       <AgentFormModal
         open={modalOpen}
