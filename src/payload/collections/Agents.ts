@@ -81,6 +81,12 @@ export const Agents: CollectionConfig = {
       admin: { hidden: true },
     },
     {
+      name: 'elevenlabsKbDocIds',
+      type: 'json',
+      label: 'ElevenLabs KB Document IDs',
+      admin: { hidden: true },
+    },
+    {
       name: 'voice',
       type: 'text',
       admin: { hidden: true },

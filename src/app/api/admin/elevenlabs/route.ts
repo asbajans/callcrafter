@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (action === 'knowledge-base') {
+    if (action === 'knowledge-base' || action === 'kb-docs') {
       if (!el) return NextResponse.json({ documents: [] })
       try {
         const data = await el.listKnowledgeBaseDocuments()
@@ -196,20 +196,22 @@ export async function POST(req: NextRequest) {
       try {
         const promptObj: any = { prompt: promptText }
 
-        const trainingDocs = await payload.find({
-          collection: 'training-docs' as any,
-          where: { agent: { equals: agentId } },
-          limit: 50,
-          depth: 1,
-        })
-        const kbDocs = (trainingDocs.docs || []).filter((d: any) => d.elevenlabsKbDocId)
-        if (kbDocs.length > 0) {
-          promptObj.knowledge_base = kbDocs.map((d: any) => ({
-            type: 'file',
-            id: d.elevenlabsKbDocId,
-            name: d.name || 'Training Document',
-            usage_mode: 'auto',
-          }))
+        const selectedKbIds: string[] = a.elevenlabsKbDocIds || []
+
+        if (selectedKbIds.length > 0) {
+          try {
+            const allDocs = await el.listKnowledgeBaseDocuments()
+            const allDocList: any[] = allDocs.documents || []
+            const selectedDocs = allDocList.filter((d: any) => selectedKbIds.includes(d.id))
+            if (selectedDocs.length > 0) {
+              promptObj.knowledge_base = selectedDocs.map((d: any) => ({
+                type: 'file',
+                id: d.id,
+                name: d.name || 'Document',
+                usage_mode: 'auto',
+              }))
+            }
+          } catch {} // silently skip KB docs if fetch fails
         }
 
         const config: any = {
@@ -246,7 +248,7 @@ export async function POST(req: NextRequest) {
           action: a.elevenlabsAgentId ? 'updated' : 'created',
           agentId: result.agent_id,
           voiceId,
-          kbDocCount: kbDocs.length,
+          kbDocCount: selectedKbIds.length,
         })
       } catch (err: any) {
         return NextResponse.json({

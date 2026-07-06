@@ -108,22 +108,26 @@ function AgentFormModal({
   loading,
   planLimits,
   elevenlabsVoices = [],
+  kbDocs = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: AgentFormData) => Promise<void>;
+  onSubmit: (data: AgentFormData, kbDocIds?: string[]) => Promise<void>;
   initialData?: AgentFormData | null;
   providers: AiProvider[];
   loading: boolean;
   planLimits?: { allowedTtsProviders?: string[]; allowedAiModels?: string[]; allowedChannels?: string[] } | null;
   elevenlabsVoices?: { id: string; name: string; language?: string | null }[];
+  kbDocs?: { id: string; name: string }[];
 }) {
   const t = useTranslations();
   const [form, setForm] = useState<AgentFormData>(initialData ?? defaultFormData);
+  const [selectedKbDocIds, setSelectedKbDocIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof AgentFormData, string>>>({});
 
   useEffect(() => {
     setForm(initialData ?? defaultFormData);
+    setSelectedKbDocIds((initialData as any)?.elevenlabsKbDocIds || []);
     setErrors({});
   }, [initialData, open]);
 
@@ -155,7 +159,7 @@ function AgentFormModal({
       setErrors(fieldErrors);
       return;
     }
-    await onSubmit(result.data);
+    await onSubmit(result.data, selectedKbDocIds);
   };
 
   const allowedModels = planLimits?.allowedAiModels;
@@ -484,6 +488,40 @@ function AgentFormModal({
               {errors.channels && <p className="text-xs text-red-400">{errors.channels}</p>}
             </div>
 
+            {kbDocs && kbDocs.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Bilgi Kaynakları</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {kbDocs.map(doc => {
+                    const isSelected = selectedKbDocIds.includes(doc.id)
+                    return (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedKbDocIds(prev =>
+                            isSelected ? prev.filter(id => id !== doc.id) : [...prev, doc.id]
+                          )
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
+                            : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:border-white/[0.15] hover:text-slate-200'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-white/[0.2]'
+                        }`}>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        <span className="truncate">{doc.name || doc.id}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Karşılama Mesajı</label>
               <input
@@ -592,6 +630,7 @@ export default function AgentsPage() {
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [planLimits, setPlanLimits] = useState<any>(null);
   const [elevenlabsVoices, setElevenlabsVoices] = useState<{ id: string; name: string; language?: string | null }[]>([]);
+  const [kbDocs, setKbDocs] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -648,12 +687,23 @@ export default function AgentsPage() {
     } catch { /* non-critical */ }
   }, []);
 
+  const fetchKbDocs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/elevenlabs/kb-docs');
+      if (res.ok) {
+        const data = await res.json();
+        setKbDocs(data.documents || []);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
     fetchProviders();
     fetchPlanLimits();
     fetchVoices();
-  }, [fetchAgents, fetchProviders, fetchPlanLimits, fetchVoices]);
+    fetchKbDocs();
+  }, [fetchAgents, fetchProviders, fetchPlanLimits, fetchVoices, fetchKbDocs]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -663,6 +713,7 @@ export default function AgentsPage() {
 
   const handleEdit = (agent: Agent) => {
     const providerId = typeof agent.provider === 'object' ? (agent.provider as any).id : agent.provider
+    const a = agent as any
     setEditingAgent({
       name: agent.name,
       description: agent.description ?? '',
@@ -675,7 +726,8 @@ export default function AgentsPage() {
       provider: providerId || undefined,
       model: agent.model || undefined,
       voiceTemplate: agent.voiceTemplate || 'natural-tr-female',
-    });
+      elevenlabsKbDocIds: a.elevenlabsKbDocIds || [],
+    } as any);
     setEditingId(agent.id);
     setModalOpen(true);
   };
@@ -685,7 +737,7 @@ export default function AgentsPage() {
     setDeleteOpen(true);
   };
 
-  const handleFormSubmit = async (data: AgentFormData) => {
+  const handleFormSubmit = async (data: AgentFormData, kbDocIds?: string[]) => {
     setSubmitting(true);
     try {
       // Check max agent limit on create
@@ -698,7 +750,7 @@ export default function AgentsPage() {
         }
       }
 
-      const payload = {
+      const payload: any = {
         name: data.name,
         description: data.description,
         systemPrompt: data.systemPrompt,
@@ -711,6 +763,7 @@ export default function AgentsPage() {
         ...(data.model ? { model: data.model } : {}),
         voiceTemplate: data.voiceTemplate || 'natural-tr-female',
       };
+      if (kbDocIds) payload.elevenlabsKbDocIds = kbDocIds;
       if (editingId) {
         await api.updateAgent(editingId, payload);
       } else {
@@ -907,6 +960,7 @@ export default function AgentsPage() {
         loading={submitting}
         planLimits={planLimits}
         elevenlabsVoices={elevenlabsVoices}
+        kbDocs={kbDocs}
       />
 
       {testAgent && (
