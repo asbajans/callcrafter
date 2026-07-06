@@ -72,6 +72,11 @@ export const TrainingDocs: CollectionConfig = {
       name: 'errorMessage',
       type: 'text',
     },
+    {
+      name: 'elevenlabsKbDocId',
+      type: 'text',
+      admin: { hidden: true },
+    },
   ],
   timestamps: true,
   access: {
