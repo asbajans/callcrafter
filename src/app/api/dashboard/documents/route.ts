@@ -54,6 +54,25 @@ export async function GET() {
   }
 }
 
+async function extractPdfText(buffer: Buffer): Promise<string | null> {
+  try {
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
+    const { createRequire } = await import('module')
+    const req = createRequire(import.meta.url)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
+    const doc = await pdfjsLib.getDocument({ data: buffer }).promise
+    const pages: string[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      const content = await page.getTextContent()
+      pages.push(content.items.map((item: any) => item.str).join(' '))
+    }
+    return pages.join('\n')
+  } catch {
+    return null
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -62,32 +81,46 @@ export async function POST(req: NextRequest) {
     const el = await getElevenLabsService()
     if (!el) return NextResponse.json({ error: 'ElevenLabs bağlantısı kurulamadı' }, { status: 400 })
 
-    const body = await req.json()
-    let textContent = body.text || null
-    const docName = body.name || 'Untitled'
-    let docType = body.type || 'txt'
-    const agentId = body.agentId || null
-    const isBase64 = body.isBase64 === true
+    let textContent: string | null = null
+    let docName = 'Untitled'
+    let docType = 'txt'
+    let agentId: string | null = null
 
-    if (textContent && isBase64 && docType === 'pdf') {
-      try {
-        const binaryStr = atob(textContent)
-        const bytes = new Uint8Array(binaryStr.length)
-        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any
-        const { createRequire } = await import('module')
-        const req = createRequire(import.meta.url)
-        pdfjsLib.GlobalWorkerOptions.workerSrc = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
-        const doc = await pdfjsLib.getDocument({ data: bytes.buffer }).promise
-        const pages: string[] = []
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i)
-          const content = await page.getTextContent()
-          pages.push(content.items.map((item: any) => item.str).join(' '))
+    const ct = req.headers.get('content-type') || ''
+    if (ct.includes('multipart/form-data') || ct.includes('form-data')) {
+      const formData = await req.formData()
+      const file = formData.get('file') as File | null
+      const textField = formData.get('text') as string | null
+      const name = formData.get('name') as string | null
+      agentId = formData.get('agentId') as string | null
+      if (name) docName = name
+
+      if (file) {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const fileName = file.name.toLowerCase()
+        if (fileName.endsWith('.pdf')) {
+          docType = 'pdf'
+          textContent = await extractPdfText(buffer)
+        } else {
+          textContent = buffer.toString('utf-8')
+          if (fileName.endsWith('.csv')) docType = 'csv'
+          else if (fileName.endsWith('.json')) docType = 'json'
+          else if (fileName.endsWith('.html') || fileName.endsWith('.htm')) docType = 'html'
         }
-        textContent = pages.join('\n')
-      } catch (err) {
-        textContent = null
+        if (!docName || docName === 'Untitled') docName = file.name
+      } else if (textField?.trim()) {
+        textContent = textField
+        docType = formData.get('type') as string || 'txt'
+      }
+    } else {
+      const body = await req.json()
+      textContent = body.text || null
+      docName = body.name || 'Untitled'
+      docType = body.type || 'txt'
+      agentId = body.agentId || null
+
+      if (textContent && body.isBase64 && docType === 'pdf') {
+        textContent = await extractPdfText(Buffer.from(textContent, 'base64'))
       }
     }
 

@@ -93,57 +93,31 @@ export default function TrainingPage() {
         return;
       }
 
-      let bodyText = textContent.trim()
-      let docType = form.type
-
-      let isBase64 = false
-      if (file) {
-        const isPdf = file.name.toLowerCase().endsWith('.pdf')
-        docType = isPdf ? 'pdf' : 'txt'
-        if (isPdf) {
-          const buf = await new Promise<ArrayBuffer>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as ArrayBuffer)
-            reader.onerror = reject
-            reader.readAsArrayBuffer(file)
-          })
-          const bytes = new Uint8Array(buf)
-          let binary = ''
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-          bodyText = btoa(binary)
-          isBase64 = true
-        } else {
-          bodyText = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsText(file)
-          })
-        }
-      }
-
-      if (!bodyText) {
-        toast.error('Metin içeriği gerekli');
+      if (!file && !textContent.trim()) {
+        toast.error('Dosya seçin veya metin girin');
         return;
       }
 
-      const payload: Record<string, any> = {
-        name: form.name,
-        type: docType,
-        text: bodyText,
+      const formData = new FormData();
+      formData.append('name', form.name);
+      formData.append('type', form.type);
+      if (form.description) formData.append('description', form.description);
+      if (file) formData.append('file', file);
+      if (textContent.trim() && !file) {
+        formData.append('text', textContent);
       }
-      if (isBase64) payload.isBase64 = true
-      if (form.agentId) payload.agentId = form.agentId
+      if (form.agentId) {
+        formData.append('agentId', form.agentId);
+      }
 
       const res = await fetch('/api/dashboard/documents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: formData,
         credentials: 'include',
       });
 
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({ error: 'Yükleme başarısız' }));
         throw new Error(errData.error || 'Yükleme başarısız');
       }
 
