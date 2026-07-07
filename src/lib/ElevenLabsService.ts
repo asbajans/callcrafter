@@ -168,6 +168,37 @@ export class ElevenLabsService {
     return this.request('DELETE', `/convai/knowledge-base/${docId}`)
   }
 
+  async addKnowledgeBaseDocToAgent(agentId: string, kbDocId: string, kbDocName: string): Promise<void> {
+    const agent = await this.getAgent(agentId)
+    const currentKb = agent?.conversation_config?.agent?.prompt?.knowledge_base || []
+    if (currentKb.some((d: any) => d.id === kbDocId)) return
+    const newKb = [
+      ...currentKb,
+      { type: 'file', id: kbDocId, name: kbDocName, usage_mode: 'auto' },
+    ]
+    await this.request('PATCH', `/convai/agents/${agentId}`, {
+      conversation_config: {
+        agent: {
+          prompt: { knowledge_base: newKb },
+        },
+      },
+    })
+  }
+
+  async removeKnowledgeBaseDocFromAgent(agentId: string, kbDocId: string): Promise<void> {
+    const agent = await this.getAgent(agentId)
+    const currentKb: any[] = agent?.conversation_config?.agent?.prompt?.knowledge_base || []
+    const newKb = currentKb.filter((d: any) => d.id !== kbDocId)
+    if (newKb.length === currentKb.length) return
+    await this.request('PATCH', `/convai/agents/${agentId}`, {
+      conversation_config: {
+        agent: {
+          prompt: { knowledge_base: newKb },
+        },
+      },
+    })
+  }
+
   async listPhoneNumbers(): Promise<any> {
     return this.request('GET', '/convai/phone-numbers')
   }

@@ -99,6 +99,21 @@ export async function POST(req: NextRequest) {
               collection: 'training-docs' as any,
               data: docData,
             })
+            if (agentId) {
+              try {
+                const localAgent = await payload.findByID({ collection: 'agents', id: parseInt(agentId, 10), depth: 0 }) as any
+                if (localAgent?.elevenlabsAgentId) {
+                  const existingIds: string[] = localAgent.elevenlabsKbDocIds || []
+                  if (!existingIds.includes(kbDoc.id)) {
+                    existingIds.push(kbDoc.id)
+                    await payload.update({ collection: 'agents', id: parseInt(agentId, 10), data: { elevenlabsKbDocIds: existingIds } as any })
+                  }
+                  await el.addKnowledgeBaseDocToAgent(localAgent.elevenlabsAgentId, kbDoc.id, file.name)
+                }
+              } catch (agentErr: any) {
+                console.error('[documents] Failed to attach KB doc to agent:', agentErr.message)
+              }
+            }
             return NextResponse.json({
               success: true,
               document: {
@@ -148,6 +163,22 @@ export async function POST(req: NextRequest) {
       data: docData,
     })
 
+    if (agentId) {
+      try {
+        const localAgent = await payload.findByID({ collection: 'agents', id: parseInt(agentId, 10), depth: 0 }) as any
+        if (localAgent?.elevenlabsAgentId) {
+          const existingIds: string[] = localAgent.elevenlabsKbDocIds || []
+          if (!existingIds.includes(kbResult.id)) {
+            existingIds.push(kbResult.id)
+            await payload.update({ collection: 'agents', id: parseInt(agentId, 10), data: { elevenlabsKbDocIds: existingIds } as any })
+          }
+          await el.addKnowledgeBaseDocToAgent(localAgent.elevenlabsAgentId, kbResult.id, docName)
+        }
+      } catch (agentErr: any) {
+        console.error('[documents] Failed to attach KB doc to agent:', agentErr.message)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       document: {
@@ -185,6 +216,17 @@ export async function DELETE(req: NextRequest) {
       const el = await getElevenLabsService()
       if (el) {
         try { await el.deleteKnowledgeBaseDocument(doc.elevenlabsKbDocId) } catch {}
+        if (doc.agent?.id || doc.agent) {
+          try {
+            const agentIdNum = doc.agent?.id || doc.agent
+            const localAgent = await payload.findByID({ collection: 'agents', id: agentIdNum, depth: 0 }) as any
+            if (localAgent?.elevenlabsAgentId) {
+              const existingIds: string[] = (localAgent.elevenlabsKbDocIds || []).filter((id: string) => id !== doc.elevenlabsKbDocId)
+              await payload.update({ collection: 'agents', id: agentIdNum, data: { elevenlabsKbDocIds: existingIds } as any })
+              await el.removeKnowledgeBaseDocFromAgent(localAgent.elevenlabsAgentId, doc.elevenlabsKbDocId)
+            }
+          } catch {}
+        }
       }
     }
 
