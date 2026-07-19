@@ -273,9 +273,9 @@ export default function HomePage({ params: { locale } }: { params: { locale: str
           <div>
             <h4 className="text-white font-semibold mb-3">Legal</h4>
             <ul className="space-y-2 text-sm text-slate-500">
-              <li><Link href="#" className="hover:text-slate-300">Privacy</Link></li>
-              <li><Link href="#" className="hover:text-slate-300">Terms</Link></li>
-              <li><Link href="#" className="hover:text-slate-300">GDPR</Link></li>
+              <li><Link href={`/${locale}/privacy`} className="hover:text-slate-300">Privacy Policy</Link></li>
+              <li><Link href={`/${locale}/terms`} className="hover:text-slate-300">Terms of Service</Link></li>
+              <li><Link href={`/${locale}/data-deletion`} className="hover:text-slate-300">Data Deletion</Link></li>
               <li><Link href="#" className="hover:text-slate-300">Security</Link></li>
             </ul>
           </div>
