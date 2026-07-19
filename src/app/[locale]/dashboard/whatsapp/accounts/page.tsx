@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import {
   Plus, Pencil, Trash2, X, Loader2, AlertCircle, QrCode,
-  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink,
+  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink, Info, ChevronDown,
 } from 'lucide-react';
 
 type WhatsAppAccount = {
@@ -34,6 +34,7 @@ export default function WhatsAppAccountsPage() {
 const [editingId, setEditingId] = useState<string | null>(null);
 const [savingId, setSavingId] = useState<string | null>(null);
 const [copiedField, setCopiedField] = useState<string | null>(null);
+const [guideOpen, setGuideOpen] = useState(false);
 
 const webhookBaseUrl = typeof window !== 'undefined'
   ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
@@ -412,13 +413,76 @@ const copyToClipboard = async (text: string, field: string) => {
 
               {form.connectionType === 'cloud_api' && (
                 <>
+                  {/* Bilgi Alma Rehberi (collapsible) */}
+                  <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setGuideOpen(!guideOpen)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-300 hover:text-slate-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Info className="w-4 h-4 text-indigo-400" />
+                        <span className="font-medium">Bu bilgileri nereden alabilirim?</span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${guideOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {guideOpen && (
+                      <div className="px-4 pb-4 space-y-3 text-xs text-slate-400 border-t border-white/[0.06] pt-3">
+                        <div className="space-y-2">
+                          <p className="text-slate-300 font-medium">1. Meta Developer Console'a gidin</p>
+                          <p className="pl-3">
+                            <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
+                              developers.facebook.com
+                            </a> {'>'} Uygulamanızı seçin {'>'} WhatsApp {'>'} Configuration
+                          </p>
+                        </div>
+
+                        <div className="grid gap-2">
+                          <div className="bg-white/[0.04] rounded-lg p-3 space-y-1">
+                            <p className="text-slate-300 font-medium">📞 Phone Number ID <span className="text-red-400">*</span></p>
+                            <p>WhatsApp {'>'} Configuration {'>'} Phone numbers bölümünde numaranızın yanında yazar.</p>
+                            <p className="text-slate-500 italic">Sadece sayılardan oluşur (örn: <code className="text-indigo-300">1234567890</code>). Telefon numarası DEĞİL, Meta'nın internal ID'sidir.</p>
+                          </div>
+
+                          <div className="bg-white/[0.04] rounded-lg p-3 space-y-1">
+                            <p className="text-slate-300 font-medium">🏢 Business Account ID</p>
+                            <p>Meta Business Suite {'>'} Ayarlar {'>'} İşletme Bilgileri sayfasında bulabilirsiniz.</p>
+                            <p className="text-slate-500 italic">Opsiyonel. Sadece sayılardan oluşur.</p>
+                          </div>
+
+                          <div className="bg-white/[0.04] rounded-lg p-3 space-y-1">
+                            <p className="text-slate-300 font-medium">🔑 Access Token</p>
+                            <p>WhatsApp {'>'} Configuration {'>'} Graph API Token Call or generate from System Users.</p>
+                            <p className="text-slate-500 italic">
+                              Uzun ömürlü (never-expires) token kullanmanız önerilir. 
+                              <br />Meta {'>'} Business Settings {'>'} System Users {'>'} Generate Token ile oluşturun.
+                              <br />Token <code className="text-indigo-300">EAAB...</code> şeklinde başlar.
+                            </p>
+                          </div>
+
+                          <div className="bg-white/[0.04] rounded-lg p-3 space-y-1">
+                            <p className="text-slate-300 font-medium">🔐 Webhook Verify Token</p>
+                            <p>Kendinizin belirlediği rastgele bir metin. Aynı değeri hem bu panele hem Meta Developer Console'a girersiniz.</p>
+                            <p className="text-slate-500 italic">Örn: <code className="text-indigo-300">callcrafter_wa_verify_2024</code> gibi tahmin edilmesi zor bir değer kullanın.</p>
+                          </div>
+
+                          <div className="bg-white/[0.04] rounded-lg p-3 space-y-1">
+                            <p className="text-slate-300 font-medium">📱 Görüntülenen Numara</p>
+                            <p>Panelde görünecek formatlanmış numara. WhatsApp mesajlaşma için kullanılmaz, sadece görsel amaçlıdır.</p>
+                            <p className="text-slate-500 italic">Örn: <code className="text-indigo-300">+90 555 000 00 00</code></p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">Phone Number ID <span className="text-red-400">*</span></label>
                     <input
                       value={form.phoneNumberId}
                       onChange={e => setForm({ ...form, phoneNumberId: e.target.value })}
                       className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
-                      placeholder="1234567890"
+                      placeholder="1234567890 (Meta'daki ID, telefon no değil)"
                     />
                   </div>
                   <div>
@@ -427,6 +491,7 @@ const copyToClipboard = async (text: string, field: string) => {
                       value={form.businessAccountId}
                       onChange={e => setForm({ ...form, businessAccountId: e.target.value })}
                       className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
+                      placeholder="Meta Business Suite'teki ID"
                     />
                   </div>
                   <div>
@@ -436,16 +501,26 @@ const copyToClipboard = async (text: string, field: string) => {
                       value={form.accessToken}
                       onChange={e => setForm({ ...form, accessToken: e.target.value })}
                       className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
-                      placeholder={editingId ? '(değiştirilmezse aynı kalır)' : ''}
+                      placeholder={editingId ? '(değiştirilmezse aynı kalır)' : 'EAAB... ile başlayan token'}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Webhook Verify Token</label>
-                    <input
-                      value={form.webhookVerifyToken}
-                      onChange={e => setForm({ ...form, webhookVerifyToken: e.target.value })}
-                      className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
-                    />
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Webhook Verify Token <span className="text-indigo-400 text-[10px]">(kendiniz belirleyin)</span></label>
+                    <div className="flex gap-2">
+                      <input
+                        value={form.webhookVerifyToken}
+                        onChange={e => setForm({ ...form, webhookVerifyToken: e.target.value })}
+                        className="flex-1 w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
+                        placeholder="örn: callcrafter_verify_123"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, webhookVerifyToken: `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` })}
+                        className="shrink-0 px-3 py-2 text-xs font-medium text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 rounded-xl transition-colors"
+                      >
+                        Rastgele Üret
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">Görüntülenen Numara</label>
@@ -464,11 +539,11 @@ const copyToClipboard = async (text: string, field: string) => {
                       Webhook Yapılandırması
                     </div>
                     <p className="text-xs text-slate-400">
-                      Meta Developer Console'da aşağıdaki bilgileri kullanarak webhook'u ayarlayın:
+                      Bu bilgileri Meta Developer Console'da webhook ayarlarında kullanacaksınız:
                     </p>
                     <div className="space-y-2">
                       <div>
-                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Webhook URL</label>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Callback URL</label>
                         <div className="flex items-center gap-2 mt-1">
                           <code className="flex-1 text-xs text-slate-200 bg-white/[0.06] rounded-lg px-3 py-2 font-mono break-all select-all">
                             {webhookBaseUrl}/api/webhooks/whatsapp
@@ -476,21 +551,23 @@ const copyToClipboard = async (text: string, field: string) => {
                           <button
                             onClick={() => copyToClipboard(`${webhookBaseUrl}/api/webhooks/whatsapp`, 'webhookUrl')}
                             className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                            title="Kopyala"
                           >
                             {copiedField === 'webhookUrl' ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                           </button>
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Verify Token</label>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Verify Token (aynısını Meta'ya girin)</label>
                         <div className="flex items-center gap-2 mt-1">
                           <code className={`flex-1 text-xs rounded-lg px-3 py-2 font-mono break-all ${form.webhookVerifyToken ? 'text-slate-200 bg-white/[0.06]' : 'text-slate-600 bg-white/[0.03] italic'}`}>
-                            {form.webhookVerifyToken || '(token girin)'}
+                            {form.webhookVerifyToken || '(önce bir token belirleyin)'}
                           </code>
                           {form.webhookVerifyToken && (
                             <button
                               onClick={() => copyToClipboard(form.webhookVerifyToken, 'verifyToken')}
                               className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                              title="Kopyala"
                             >
                               {copiedField === 'verifyToken' ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                             </button>
@@ -499,11 +576,11 @@ const copyToClipboard = async (text: string, field: string) => {
                       </div>
                     </div>
                     <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 text-xs text-slate-400 space-y-1">
-                      <p className="text-slate-500 font-medium mb-1">Meta Developer Console'da şu adımları izleyin:</p>
+                      <p className="text-slate-500 font-medium mb-1">Meta Developer Console'da yapılacaklar:</p>
                       <p>1. <strong className="text-slate-300">WhatsApp &gt; Configuration &gt; Webhook</strong> sayfasına gidin</p>
-                      <p>2. <strong className="text-slate-300">Callback URL</strong> alanına yukarıdaki URL'yi girin</p>
+                      <p>2. <strong className="text-slate-300">Callback URL</strong> alanına yukarıdaki URL'yi <strong className="text-indigo-300">kopyalayıp</strong> yapıştırın</p>
                       <p>3. <strong className="text-slate-300">Verify Token</strong> alanına yukarıdaki token'ı girin</p>
-                      <p>4. <strong className="text-slate-300">Webhook fields</strong> altında <code className="text-indigo-300">messages</code> olayını abone olun</p>
+                      <p>4. <strong className="text-slate-300">Webhook fields</strong> altında <code className="text-indigo-300">messages</code> olayını seçip <strong className="text-slate-300">Subscribe</strong> butonuna tıklayın</p>
                     </div>
                   </div>
                 </>
