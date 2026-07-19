@@ -13,22 +13,48 @@ export async function POST(req: NextRequest) {
     console.log('[QR-Webhook] Received webhook:', JSON.stringify(body).slice(0, 1000))
     const payload = await getPayload({ config })
 
-    const accountId = body.instance
-    console.log('[QR-Webhook] instance field:', accountId)
+    // Try multiple fields to find the instance name from Evolution webhook payload
+    const instanceName = body.instance
+      || body.data?.instance
+      || body.data?.instanceName
+      || body.server_url?.split('/').pop()
+      || ''
+    console.log('[QR-Webhook] instance field:', instanceName)
+
     let account: any = null
 
-    if (accountId) {
+    if (instanceName) {
       const accounts = await payload.find({
         collection: 'whatsapp-accounts' as any,
-        where: { qrSessionId: { equals: accountId } },
+        where: { qrSessionId: { equals: instanceName } },
         depth: 1,
         limit: 1,
       })
       account = accounts.docs[0] ?? null
       if (!account) {
-        console.log('[QR-Webhook] Account not found by qrSessionId:', accountId)
+        console.log('[QR-Webhook] Account not found by qrSessionId:', instanceName)
       }
-    } else {
+    }
+
+    if (!account) {
+      // Try to find by instance name pattern match (e.g. wa_123_456_recreate matches wa_123_456)
+      if (instanceName) {
+        const baseId = instanceName.replace(/_\d+_recreate$/, '').replace(/_\d+$/, '')
+        if (baseId && baseId !== instanceName) {
+          console.log('[QR-Webhook] Trying base id:', baseId)
+          const accounts = await payload.find({
+            collection: 'whatsapp-accounts' as any,
+            where: { qrSessionId: { contains: baseId } },
+            depth: 1,
+            limit: 1,
+          })
+          account = accounts.docs[0] ?? null
+        }
+      }
+    }
+
+    if (!account) {
+      console.log('[QR-Webhook] No account found by instance name, falling back to first active QR account')
       const accounts = await payload.find({
         collection: 'whatsapp-accounts' as any,
         where: {
@@ -152,10 +178,18 @@ export async function POST(req: NextRequest) {
 
       const conversation = await findOrCreateConversation(account, account.tenant, contactPhone, msg.pushName, msg.remoteJid)
 
-      const messageBody = msg.text ?? ''
+      let messageBody = msg.text ?? msg.mediaCaption ?? ''
       if (!messageBody) {
-        console.log('[QR-Webhook] Skipping message with no body:', msg.id)
-        continue
+        const typeLabels: Record<string, string> = {
+          image: '📷 Resim',
+          video: '🎬 Video',
+          audio: '🎵 Ses',
+          document: '📄 Belge',
+          sticker: '🎨 Sticker',
+          location: '📍 Konum',
+        }
+        messageBody = typeLabels[msg.type] || `[${msg.type}]`
+        console.log('[QR-Webhook] Using fallback body for media type:', msg.type, '->', messageBody)
       }
 
       console.log('[QR-Webhook] Creating inbound message for conversation:', conversation.id)

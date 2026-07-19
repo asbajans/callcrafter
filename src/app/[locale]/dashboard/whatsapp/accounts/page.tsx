@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import {
   Plus, Pencil, Trash2, X, Loader2, AlertCircle, QrCode,
-  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight,
+  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink,
 } from 'lucide-react';
 
 type WhatsAppAccount = {
@@ -31,8 +31,21 @@ export default function WhatsAppAccountsPage() {
   const [qrCode, setQrCode] = useState('');
   const [qrSessionId, setQrSessionId] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
+const [editingId, setEditingId] = useState<string | null>(null);
+const [savingId, setSavingId] = useState<string | null>(null);
+const [copiedField, setCopiedField] = useState<string | null>(null);
+
+const webhookBaseUrl = typeof window !== 'undefined'
+  ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
+  : process.env.NEXT_PUBLIC_BASE_URL || 'https://callcrafter.com.tr';
+
+const copyToClipboard = async (text: string, field: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  } catch {}
+};
 
   const [form, setForm] = useState({
     name: '',
@@ -423,7 +436,7 @@ export default function WhatsAppAccountsPage() {
                       value={form.accessToken}
                       onChange={e => setForm({ ...form, accessToken: e.target.value })}
                       className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
-                      placeholder={editingId ? '(değiştirilmedi)' : ''}
+                      placeholder={editingId ? '(değiştirilmezse aynı kalır)' : ''}
                     />
                   </div>
                   <div>
@@ -442,6 +455,56 @@ export default function WhatsAppAccountsPage() {
                       className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
                       placeholder="+90 555 000 00 00"
                     />
+                  </div>
+
+                  {/* Webhook Configuration Info */}
+                  <div className="bg-indigo-500/10 border border-indigo-500/25 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-indigo-300 text-sm font-semibold">
+                      <ExternalLink className="w-4 h-4" />
+                      Webhook Yapılandırması
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Meta Developer Console'da aşağıdaki bilgileri kullanarak webhook'u ayarlayın:
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Webhook URL</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="flex-1 text-xs text-slate-200 bg-white/[0.06] rounded-lg px-3 py-2 font-mono break-all select-all">
+                            {webhookBaseUrl}/api/webhooks/whatsapp
+                          </code>
+                          <button
+                            onClick={() => copyToClipboard(`${webhookBaseUrl}/api/webhooks/whatsapp`, 'webhookUrl')}
+                            className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                          >
+                            {copiedField === 'webhookUrl' ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Verify Token</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className={`flex-1 text-xs rounded-lg px-3 py-2 font-mono break-all ${form.webhookVerifyToken ? 'text-slate-200 bg-white/[0.06]' : 'text-slate-600 bg-white/[0.03] italic'}`}>
+                            {form.webhookVerifyToken || '(token girin)'}
+                          </code>
+                          {form.webhookVerifyToken && (
+                            <button
+                              onClick={() => copyToClipboard(form.webhookVerifyToken, 'verifyToken')}
+                              className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                            >
+                              {copiedField === 'verifyToken' ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 text-xs text-slate-400 space-y-1">
+                      <p className="text-slate-500 font-medium mb-1">Meta Developer Console'da şu adımları izleyin:</p>
+                      <p>1. <strong className="text-slate-300">WhatsApp &gt; Configuration &gt; Webhook</strong> sayfasına gidin</p>
+                      <p>2. <strong className="text-slate-300">Callback URL</strong> alanına yukarıdaki URL'yi girin</p>
+                      <p>3. <strong className="text-slate-300">Verify Token</strong> alanına yukarıdaki token'ı girin</p>
+                      <p>4. <strong className="text-slate-300">Webhook fields</strong> altında <code className="text-indigo-300">messages</code> olayını abone olun</p>
+                    </div>
                   </div>
                 </>
               )}

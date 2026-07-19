@@ -41,6 +41,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const payload = await getPayload({ config })
   const data = await req.json()
 
+  // Preserve sensitive fields if not provided in update
+  if (data.accessToken === '' || data.accessToken === undefined) {
+    delete data.accessToken
+  }
+  if (data.webhookVerifyToken === '' || data.webhookVerifyToken === undefined) {
+    delete data.webhookVerifyToken
+  }
+  if (data.accessToken === null) {
+    data.accessToken = ''
+  }
+  if (data.webhookVerifyToken === null) {
+    data.webhookVerifyToken = ''
+  }
+
   const result = await payload.update({
     collection: 'whatsapp-accounts' as any,
     id,

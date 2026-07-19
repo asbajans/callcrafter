@@ -249,6 +249,81 @@ Host: `192.168.0.243:9000`
 - **App starts with empty env**: Stack env vars were cleared — re-apply via PUT with correct Env array.
 - **Compose file mismatch**: `config/portainer-stack.yml` in repo is source of truth, but Portainer has its own copy. After changing compose in repo, update it in Portainer manually or via PUT API.
 
+## WhatsApp Integration
+
+### Connection Types
+
+| Type | Description | Setup |
+|------|-------------|-------|
+| **Cloud API** | Meta Business API — official WhatsApp Business API | User enters credentials from Meta Developer Console |
+| **QR Bridge** | Evolution API (Baileys) — WhatsApp Web protocol | User scans QR code from WhatsApp mobile |
+
+### Cloud API Setup Flow
+
+1. User creates WhatsApp account in panel (`/dashboard/whatsapp/accounts`)
+2. Fills in: `phoneNumberId`, `businessAccountId`, `accessToken`, `webhookVerifyToken`
+3. Panel shows the webhook URL and verify token to configure in Meta Developer Console:
+   - **Webhook URL**: `{BASE_URL}/api/webhooks/whatsapp`
+   - **Verify Token**: User-defined, displayed in panel with copy button
+4. Meta sends verification GET → our handler matches verify token → confirms subscription
+5. Inbound messages → POST `/api/webhooks/whatsapp` → find account by `phoneNumberId` from payload → AI processing → reply
+
+### QR Bridge Setup Flow
+
+1. User creates WhatsApp account with type "QR Bridge"
+2. Clicks "QR Bağla" → creates Evolution API instance with unique session ID
+3. QR code displayed in modal → user scans with WhatsApp mobile
+4. Evolution API sends connection update webhook → `/api/webhooks/whatsapp/qr`
+5. Inbound messages → AI processing → reply via Evolution API
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/payload/collections/WhatsAppAccounts.ts` | Account schema (cloud_api/qr) |
+| `src/payload/collections/WhatsAppConversations.ts` | Conversation threads per account |
+| `src/payload/collections/WhatsAppMessages.ts` | Individual messages |
+| `src/channels/whatsapp/WhatsAppAdapter.ts` | Meta Cloud API client |
+| `src/channels/whatsapp/WhatsAppQRBridgeAdapter.ts` | Evolution API client (QR bridge) |
+| `src/app/api/whatsapp/accounts/route.ts` | CRUD accounts |
+| `src/app/api/whatsapp/accounts/[id]/route.ts` | Get/update/delete account |
+| `src/app/api/whatsapp/accounts/[id]/qr/route.ts` | QR lifecycle |
+| `src/app/api/whatsapp/conversations/route.ts` | CRUD conversations |
+| `src/app/api/whatsapp/conversations/[id]/send/route.ts` | Send message |
+| `src/app/api/whatsapp/send-new/route.ts` | Send to new contact |
+| `src/app/api/webhooks/whatsapp/route.ts` | Cloud API webhook (GET verify, POST inbound) |
+| `src/app/api/webhooks/whatsapp/qr/route.ts` | QR bridge webhook (POST inbound) |
+| `src/app/api/webhooks/whatsapp/shared.ts` | Shared: findOrCreateConversation, processWithAI, etc. |
+| `src/app/[locale]/dashboard/whatsapp/page.tsx` | WhatsApp tab with Inbox + Accounts |
+| `src/app/[locale]/dashboard/whatsapp/accounts/page.tsx` | Account management UI |
+| `src/app/[locale]/dashboard/whatsapp/conversations/page.tsx` | Inbox UI |
+
+### Multi-Account Support
+
+- **Cloud API**: Webhook handler matches inbound messages by `phoneNumberId` from Meta payload. Falls back to first active account if no match.
+- **QR Bridge**: Webhook handler matches by `instance` field (session ID). Falls back to first active QR account if no match.
+
+## WhatsApp Improvements (Jul 2026)
+
+### Aşama 1 — Webhook Bilgi Kartı
+- **`src/app/[locale]/dashboard/WhatsAppAccounts/page.tsx`**: Cloud API formuna webhook URL ve verify token gösteren bilgi paneli eklendi. Kopyala butonu ile kullanıcı rahatça Meta'ya yapıştırabilir. Kurulum adımları (Callback URL, Verify Token, events) panelde açıklanır.
+
+### Aşama 2 — Multi-Account Cloud API Webhook
+- **`src/app/api/webhooks/whatsapp/route.ts`**: GET handler artık verify token ile eşleşen hesabı bulur (tüm aktif hesapları dener). POST handler `phoneNumberId` ile doğru hesabı eşler, bulamazsa ilk aktif hesaba düşer.
+
+### Aşama 3 — QR Bridge Hesap Eşleme
+- **`src/app/api/webhooks/whatsapp/qr/route.ts`**: `body.instance` dışında `body.data?.instance`, `body.data?.instanceName`, `body.server_url` gibi alternatif alanları dener. Instance adı bulunamazsa base ID ile pattern match (`_recreate` suffix temizlenir).
+
+### Aşama 4 — Legacy Env Var Temizliği
+- **`docker-compose.yml`**: Kullanılmayan `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` satırları kaldırıldı. Bu değerler artık `WhatsAppAccounts` koleksiyonunda tenant bazında saklanıyor.
+
+### Aşama 5 — Token Koruma
+- **`src/app/api/whatsapp/accounts/[id]/route.ts`**: PUT handler'da `accessToken` ve `webhookVerifyToken` boş gelirse mevcut değer korunur.
+- **UI**: Edit modunda access token placeholder "(değiştirilmezse aynı kalır)" olarak güncellendi.
+
+### Aşama 6 — QR Medya Mesaj Desteği
+- **`src/app/api/webhooks/whatsapp/qr/route.ts`**: Medya mesajları (image/video/audio/document/sticker) için caption veya fallback metin (`[Resim]`, `[Video]`, `[Ses]`, `[Belge]`, `[Sticker]`) kullanılır. Artık medya mesajları sessizce atlanmaz.
+
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
 - 4 Pricing Plans
