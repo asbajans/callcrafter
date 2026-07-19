@@ -215,6 +215,12 @@ Set in Portainer stack env (not in compose file):
 | `WA_BRIDGE_API_KEY`         | `callcrafter-dev-wa-key`                                              |
 | `WA_BRIDGE_WEBHOOK_SECRET`  | `callcrafter-dev-wa-webhook-secret`                                   |
 | `WA_BRIDGE_URL`             | `http://wa-bridge:8080`                                               |
+| `WHATSAPP_APP_ID`            | _(Meta App ID)_                                                      |
+| `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | _(Embedded Signup Builder'daki Config ID)_                |
+| `WHATSAPP_SYSTEM_USER_TOKEN` | _(System User long-lived token)_                                     |
+| `WHATSAPP_WABA_ID`           | `995573293476977`                                                     |
+| `WHATSAPP_PHONE_NUMBER_ID`   | `1277477152105345`                                                    |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | `callcrafter-whatsapp-verify-2024`                                |
 | `WHATSAPP_CONTEXT_RESET_MINUTES` | `30`                                                             |
 | `WHATSAPP_AUTO_TICKET`      | `false`                                                               |
 
@@ -318,10 +324,33 @@ CallCrafter bir **Meta Tech Provider (Business Solution Provider)** olarak kaydo
 | **Embedded Signup** | Müşterinin bizim panelden WABA + numara oluşturması |
 | **Registration PIN** | Numara kaydı için 6 haneli PIN (varsayılan: `000000`) |
 
-### Müşteri Onboarding Akışı (Embedded Signup)
+### Müşteri Onboarding Akışı (Embedded Signup v4)
 
 1. Müşteri panele girer → "WhatsApp Bağla" butonuna tıklar
-2. Embedded Signup açılır penceresi açılır (Meta SDK)
+2. `FB.login({ config_id })` çağrılır → Meta SDK popup'ı açar
+3. Müşteri Meta hesabına giriş yapar (veya yeni hesap açar)
+4. İşletme bilgilerini girer
+5. Telefon numarası ekler → SMS ile doğrular
+6. Meta, `window.postMessage` ile WABA ID + Phone Number ID döner
+7. Frontend, `/api/whatsapp/embedded-signup/complete` endpoint'ine gönderir
+8. Backend:
+   - WhatsAppAccounts koleksiyonunda hesap oluşturur
+   - Registration API ile numarayı kaydeder (`POST /{phone-id}/register`)
+   - Webhook aboneliği yapar (`POST /{waba-id}/subscribed_apps`)
+9. Numara aktif — mesajlaşma başlar
+
+### Embedded Signup Gereksinimleri
+
+**Meta tarafı (App Dashboard):**
+1. App Review'dan Advanced access onayı alınmalı (`whatsapp_business_management` + `whatsapp_business_messaging`)
+2. App → WhatsApp → **Embedded Signup Builder**'da bir konfigürasyon oluşturulmalı
+3. Oluşan **Config ID** `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` env var'ına eklenmeli
+4. App'in **App ID**'si `WHATSAPP_APP_ID` env var'ına eklenmeli
+
+**Kod tarafı:**
+- `src/app/api/whatsapp/embedded-signup/route.ts` — Config ID'yi frontend'e döner (GET)
+- `src/app/api/whatsapp/embedded-signup/complete/route.ts` — Embedded Signup tamamlandığında hesap oluşturur (POST)
+- `src/app/[locale]/dashboard/whatsapp/accounts/page.tsx` — "WhatsApp Bağla" butonu + FB SDK + postMessage dinleyici
 3. Müşteri Meta hesabına giriş yapar
 4. Müşterinin işletme bilgileri alınır (Business Verification)
 5. Telefon numarası girer → SMS ile doğrular

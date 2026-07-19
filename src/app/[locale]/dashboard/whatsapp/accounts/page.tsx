@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import {
   Plus, Pencil, Trash2, X, Loader2, AlertCircle, QrCode,
-  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink, Info, ChevronDown,
+  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink, Info, ChevronDown, MessageCircle,
 } from 'lucide-react';
 
 type WhatsAppAccount = {
@@ -36,6 +36,8 @@ const [savingId, setSavingId] = useState<string | null>(null);
 const [registeringId, setRegisteringId] = useState<string | null>(null);
 const [copiedField, setCopiedField] = useState<string | null>(null);
 const [guideOpen, setGuideOpen] = useState(false);
+const [esLoading, setEsLoading] = useState(false);
+const [esConfig, setEsConfig] = useState<{ appId: string; configId: string } | null>(null);
 
 const webhookBaseUrl = typeof window !== 'undefined'
   ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
@@ -73,6 +75,103 @@ const copyToClipboard = async (text: string, field: string) => {
   };
 
   useEffect(() => { fetchAccounts(); }, []);
+
+  // Load Embedded Signup config
+  useEffect(() => {
+    fetch('/api/whatsapp/embedded-signup')
+      .then(r => r.json())
+      .then(d => { if (d.appId && d.configId) setEsConfig(d) })
+      .catch(() => {})
+  }, []);
+
+  // Init FB SDK
+  useEffect(() => {
+    if (!esConfig) return
+    if (typeof window === 'undefined' || (window as any).FB) return;
+    const doc = window.document;
+    const script = doc.createElement('script');
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = 'anonymous';
+    script.src = `https://connect.facebook.net/en_US/sdk.js`;
+    script.onload = () => {
+      (window as any).FB.init({
+        appId: esConfig.appId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: 'v21.0',
+      });
+    };
+    doc.body.appendChild(script);
+  }, [esConfig]);
+
+  // Listen for Embedded Signup postMessage
+  useEffect(() => {
+    const listener = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.facebook.com') return;
+      try {
+        const eventData = JSON.parse(event.data);
+        if (eventData.type !== 'WA_EMBEDDED_SIGNUP') return;
+        if (eventData.event === 'FINISH' || eventData.event === 'FINISH_ONLY_WABA') {
+          const data = eventData.data || {};
+          const wabaId = data.waba_id || data.wabaId || data.businessAccountId;
+          const phoneNumberId = data.phone_number_id || data.phoneNumberId;
+          const displayPhoneNumber = data.display_phone_number || data.displayPhoneNumber;
+
+          if (!wabaId || !phoneNumberId) {
+            toast.error('Eksik hesap bilgisi alındı');
+            setEsLoading(false);
+            return;
+          }
+
+          fetch('/api/whatsapp/embedded-signup/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wabaId, phoneNumberId, displayPhoneNumber }),
+            credentials: 'include',
+          })
+            .then(r => r.json())
+            .then(result => {
+              if (result.error) {
+                toast.error(result.error);
+              } else {
+                toast.success('WhatsApp hesabı başarıyla bağlandı!');
+                fetchAccounts();
+              }
+            })
+            .catch(err => toast.error(err.message || 'Bağlanamadı'))
+            .finally(() => setEsLoading(false));
+        }
+      } catch {}
+    };
+    window.addEventListener('message', listener);
+    return () => window.removeEventListener('message', listener);
+  }, []);
+
+  const launchWhatsAppSignup = useCallback(() => {
+    const FB = (window as any).FB;
+    if (!FB || !esConfig) {
+      toast.error('Facebook SDK henüz yüklenmedi');
+      return;
+    }
+    setEsLoading(true);
+    FB.login(
+      (response: any) => {
+        if (response.authResponse?.code) {
+        }
+      },
+      {
+        config_id: esConfig.configId,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: { setup: {} },
+      }
+    );
+    // FB.login popup kapanırsa (user closes), reset loading after timeout
+    setTimeout(() => {
+      setEsLoading(prev => prev === true ? false : prev);
+    }, 120000);
+  }, [esConfig]);
 
   const resetForm = () => {
     setForm({ name: '', phoneNumberId: '', businessAccountId: '', accessToken: '', webhookVerifyToken: '', displayPhoneNumber: '', connectionType: 'cloud_api' });
@@ -250,12 +349,22 @@ const copyToClipboard = async (text: string, field: string) => {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+          {esConfig && (
+            <button
+              onClick={launchWhatsAppSignup}
+              disabled={esLoading}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+            >
+              {esLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+              {esLoading ? 'Bağlanıyor...' : 'WhatsApp Bağla'}
+            </button>
+          )}
           <button
             onClick={openCreate}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-indigo-600/20"
           >
             <Plus className="w-4 h-4" />
-            Hesap Ekle
+            Manuel Ekle
           </button>
         </div>
       </div>
