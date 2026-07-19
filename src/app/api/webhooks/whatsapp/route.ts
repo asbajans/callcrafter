@@ -8,6 +8,12 @@ import {
 } from './shared'
 
 async function findAccountByVerifyToken(token: string) {
+  // First check central env var token (Tech Provider mode)
+  const centralToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+  if (centralToken && centralToken === token) {
+    return { isCentral: true } // Signal that this is our central app
+  }
+  // Fallback: check per-account tokens (legacy)
   const payload = await getPayload({ config })
   const accounts = await payload.find({
     collection: 'whatsapp-accounts' as any,
@@ -20,24 +26,7 @@ async function findAccountByVerifyToken(token: string) {
     },
     limit: 1,
   })
-  if (accounts.docs.length > 0) return accounts.docs[0]
-
-  const all = await payload.find({
-    collection: 'whatsapp-accounts' as any,
-    where: {
-      and: [
-        { connectionType: { equals: 'cloud_api' } },
-        { isActive: { equals: true } },
-      ],
-    },
-  })
-  for (const acc of all.docs) {
-    const adapter = createAdapter(acc)
-    if (adapter?.verifyWebhook('subscribe', token, 'test')) {
-      return acc
-    }
-  }
-  return null
+  return accounts.docs[0] || null
 }
 
 async function findAccountByPhoneNumberId(phoneNumberId: string) {
@@ -64,6 +53,14 @@ export async function GET(req: NextRequest) {
 
   const account = await findAccountByVerifyToken(token)
   if (!account) {
+    return NextResponse.json({ error: 'Verification failed' }, { status: 403 })
+  }
+
+  // Central Tech Provider mode — verify using env var
+  if ((account as any).isCentral) {
+    if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+      return new NextResponse(challenge, { status: 200 })
+    }
     return NextResponse.json({ error: 'Verification failed' }, { status: 403 })
   }
 

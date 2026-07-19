@@ -44,8 +44,13 @@ export class WhatsAppAdapter {
   private config: WhatsAppConfig;
   private baseUrl = 'https://graph.facebook.com/v21.0';
 
-  constructor(config: WhatsAppConfig) {
-    this.config = config;
+  constructor(config: Partial<WhatsAppConfig>) {
+    this.config = {
+      accessToken: config.accessToken || process.env.WHATSAPP_SYSTEM_USER_TOKEN || '',
+      phoneNumberId: config.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+      webhookVerifyToken: config.webhookVerifyToken || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '',
+      businessAccountId: config.businessAccountId || process.env.WHATSAPP_WABA_ID,
+    };
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

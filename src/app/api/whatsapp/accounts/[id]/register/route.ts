@@ -31,8 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Only Cloud API accounts can be registered' }, { status: 400 })
   }
 
-  if (!account.accessToken || !account.phoneNumberId) {
-    return NextResponse.json({ error: 'Account missing accessToken or phoneNumberId' }, { status: 400 })
+  const accessToken = account.accessToken || process.env.WHATSAPP_SYSTEM_USER_TOKEN
+  if (!accessToken || !account.phoneNumberId) {
+    return NextResponse.json({ error: 'Account missing phoneNumberId or accessToken' }, { status: 400 })
   }
 
   const body = await req.json().catch(() => ({}))
@@ -40,9 +41,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const adapter = new WhatsAppAdapter({
-      accessToken: account.accessToken,
+      accessToken,
       phoneNumberId: account.phoneNumberId,
-      webhookVerifyToken: account.webhookVerifyToken || '',
+      webhookVerifyToken: account.webhookVerifyToken || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '',
     })
 
     const result = await adapter.registerNumber(pin)

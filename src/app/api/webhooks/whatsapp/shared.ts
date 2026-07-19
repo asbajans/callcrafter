@@ -26,10 +26,10 @@ export async function resolveAccount(accountId?: number | string) {
 export function createAdapter(account: any): WhatsAppAdapter | null {
   if (!account || account.connectionType !== 'cloud_api') return null
   return new WhatsAppAdapter({
-    accessToken: account.accessToken || '',
-    phoneNumberId: account.phoneNumberId || '',
-    webhookVerifyToken: account.webhookVerifyToken || '',
-    businessAccountId: account.businessAccountId,
+    accessToken: account.accessToken || undefined,
+    phoneNumberId: account.phoneNumberId || undefined,
+    webhookVerifyToken: account.webhookVerifyToken || undefined,
+    businessAccountId: account.businessAccountId || undefined,
   })
 }
 
