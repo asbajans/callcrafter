@@ -249,32 +249,162 @@ Host: `192.168.0.243:9000`
 - **App starts with empty env**: Stack env vars were cleared — re-apply via PUT with correct Env array.
 - **Compose file mismatch**: `config/portainer-stack.yml` in repo is source of truth, but Portainer has its own copy. After changing compose in repo, update it in Portainer manually or via PUT API.
 
-## WhatsApp Integration
+## WhatsApp Integration — Meta Tech Provider (BSP) Approach
 
-### Connection Types
+### Genel Bakış
 
-| Type | Description | Setup |
-|------|-------------|-------|
-| **Cloud API** | Meta Business API — official WhatsApp Business API | User enters credentials from Meta Developer Console |
-| **QR Bridge** | Evolution API (Baileys) — WhatsApp Web protocol | User scans QR code from WhatsApp mobile |
+CallCrafter bir **Meta Tech Provider (Business Solution Provider)** olarak kaydolacak. Bu modelde:
 
-### Cloud API Setup Flow
+- **CallCrafter** kendi Meta Business Account'u ve WhatsApp uygulamasına sahiptir
+- **Müşteriler** kendi Meta Business Account'larını oluşturmaz, bizim platformumuz üzerinden onboard olur
+- **Her müşteri** kendi WhatsApp Business Account'una (WABA) ve telefon numarasına sahip olur
+- **Tüm mesajlaşma** bizim tek bir webhook'umuz (`/api/webhooks/whatsapp`) üzerinden akar
+- **Müşteriler** sadece telefon numaralarını verir, Meta ile uğraşmaz
 
-1. User creates WhatsApp account in panel (`/dashboard/whatsapp/accounts`)
-2. Fills in: `phoneNumberId`, `businessAccountId`, `accessToken`, `webhookVerifyToken`
-3. Panel shows the webhook URL and verify token to configure in Meta Developer Console:
-   - **Webhook URL**: `{BASE_URL}/api/webhooks/whatsapp`
-   - **Verify Token**: User-defined, displayed in panel with copy button
-4. Meta sends verification GET → our handler matches verify token → confirms subscription
-5. Inbound messages → POST `/api/webhooks/whatsapp` → find account by `phoneNumberId` from payload → AI processing → reply
+### Tech Provider Olma Süreci (Meta'da Yapılacaklar)
 
-### QR Bridge Setup Flow
+| Adım | İşlem | Süre | Detay |
+|------|-------|------|-------|
+| **1** | Meta Developer hesabı oluştur | 1 saat | [developers.facebook.com](https://developers.facebook.com) |
+| **2** | Yeni Meta App oluştur (WhatsApp use case) | 15 dk | App Dashboard → Create App → WhatsApp |
+| **3** | Business Portfolio bağla | 15 dk | App → Use Cases → WhatsApp → Business Portfolio seç |
+| **4** | **Business Verification** | **1-7 gün** | [Business Verification](https://www.facebook.com/business/help/2058515294227817) — şirket belgeleri gerekli |
+| **5** | **App Review** | **1-3 gün** | Video kanıt + dokümantasyon gönder |
+| **6** | Tech Provider onboarding sayfasını tamamla | 30 dk | App Dashboard → Use Cases → WhatsApp → Tech Provider onboarding |
+| **7** | Embedded Signup SDK'sını entegre et | 2-3 gün | Müşteri onboarding akışı |
+| **8** | Canlıya geç | — | Development → Live |
 
-1. User creates WhatsApp account with type "QR Bridge"
-2. Clicks "QR Bağla" → creates Evolution API instance with unique session ID
-3. QR code displayed in modal → user scans with WhatsApp mobile
-4. Evolution API sends connection update webhook → `/api/webhooks/whatsapp/qr`
-5. Inbound messages → AI processing → reply via Evolution API
+### Mimari
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   CallCrafter Platform                     │
+│                                                           │
+│  ┌──────────────────────┐  ┌──────────────────────────┐   │
+│  │  Meta App (Bizim)    │  │  Webhook (/api/webhooks/  │   │
+│  │  - 1 WABA (Master)   │  │    whatsapp)              │   │
+│  │  - 1 App ID          │  │  - Tüm müşteriler buraya  │   │
+│  │  - 1 System User     │  │  - phoneNumberId ile ayırt│   │
+│  │  - 1 Access Token    │  │  - Tenant'a yönlendir     │   │
+│  └──────────┬───────────┘  └──────────────────────────┘   │
+│             │                                             │
+│  ┌──────────▼──────────────────────────────────────────┐  │
+│  │              WhatsAppAccounts Koleksiyonu             │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │  │
+│  │  │Müşteri A│ │Müşteri B│ │Müşteri C│ │Müşteri D│   │  │
+│  │  │WABA: x  │ │WABA: y  │ │WABA: z  │ │WABA: w  │   │  │
+│  │  │Tel: +90…│ │Tel: +90…│ │Tel: +90…│ │Tel: +90…│   │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘   │  │
+│  └─────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Meta Graph API                          │
+│  https://graph.facebook.com/v23.0/{phone-number-id}/...   │
+│  Authorization: Bearer {Tek Sistem Kullanıcı Token'ı}     │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Anahtar Kavramlar
+
+| Terim | Açıklama |
+|-------|----------|
+| **Meta Business Account** | CallCrafter'ın Meta'daki şirket hesabı (eskiden Business Manager) |
+| **WABA** | WhatsApp Business Account — her müşteri için ayrı |
+| **Phone Number ID** | Meta'nın numaraya verdiği ID (ör: `123456789`) |
+| **System User** | CallCrafter'ın API çağrıları için kullandığı kullanıcı |
+| **Access Token** | System User'a ait uzun ömürlü token (never-expires) |
+| **Embedded Signup** | Müşterinin bizim panelden WABA + numara oluşturması |
+| **Registration PIN** | Numara kaydı için 6 haneli PIN (varsayılan: `000000`) |
+
+### Müşteri Onboarding Akışı (Embedded Signup)
+
+1. Müşteri panele girer → "WhatsApp Bağla" butonuna tıklar
+2. Embedded Signup açılır penceresi açılır (Meta SDK)
+3. Müşteri Meta hesabına giriş yapar
+4. Müşterinin işletme bilgileri alınır (Business Verification)
+5. Telefon numarası girer → SMS ile doğrular
+6. Meta bize **WABA ID** + **Phone Number ID** döner
+7. Biz `POST /{phone-number-id}/register` ile numarayı kaydederiz (PIN: `000000`)
+8. Webhook ayarlarımız otomatik gelir (müşteri ayar yapmaz)
+9. Numara aktif — mesajlaşma başlar
+
+### Önemli Meta Politikaları ve Limitler
+
+| Konu | Detay |
+|------|-------|
+| **İlk limit** | Yeni WABA başına en fazla 2 telefon numarası (başlangıçta) |
+| **Limit artırma** | Business Verification + Display Name onayı + Kalite skoru ile artar |
+| **Maksimum numara** | Bir WABA'da talebe bağlı olarak 50+ numara |
+| **Business Verification** | Zorunlu. Şirket belgeleri (vergi levhası, vb.) gerekli. 1-7 gün. |
+| **App Review** | Zorunlu. Video kanıt + dokümantasyon. 1-3 gün. |
+| **Development modu** | App Review öncesi 50 unique numara/gün sınırı |
+| **Numara doğrulama** | SMS veya telefon çağrısı ile 6 haneli kod |
+| **Display Name onayı** | Numaranın görünen adı Meta tarafından onaylanmalı |
+| **Template onayı** | Proaktif mesajlar için template gerekli (24h dışı) |
+| **24 saat kuralı** | Kullanıcı son mesajından itibaren 24h içinde serbest mesaj |
+| **Conversation-based pricing** | Meta konuşma başına ücretlendirir (service/marketing/utility) |
+| **Numara taşıma** | Müşteri başka BSP'den geliyorsa Migration API kullanılır |
+
+### Kullanılan Graph API Endpoints
+
+```
+# Numara kaydı
+POST /v23.0/{phone-number-id}/register
+{
+  "messaging_product": "whatsapp",
+  "pin": "000000"
+}
+
+# Mesaj gönderme
+POST /v23.0/{phone-number-id}/messages
+Authorization: Bearer {system-user-token}
+{
+  "messaging_product": "whatsapp",
+  "to": "{musteri-telefonu}",
+  "type": "text",
+  "text": { "body": "Merhaba!" }
+}
+
+# Medya URL alma
+GET /v23.0/{media-id}
+Authorization: Bearer {system-user-token}
+
+# WABA bilgisi
+GET /v23.0/{waba-id}
+Authorization: Bearer {system-user-token}
+
+# Numara bilgisi
+GET /v23.0/{phone-number-id}?fields=id,display_phone_number,quality_rating,platform_type
+Authorization: Bearer {system-user-token}
+```
+
+### Webhook Yapılandırması
+
+**Bizim taraf (Meta'ya girilenler):**
+- **Callback URL**: `{NEXT_PUBLIC_BASE_URL}/api/webhooks/whatsapp`
+- **Verify Token**: CallCrafter'ın kendi belirlediği sabit token
+- **Abone olunan event**: `messages`
+
+**Müşteri tarafı:**
+- Meta Developer Console'a girmesine gerek yok
+- Webhook otomatik olarak bizim URL'imize gelir
+- Gelen mesaj `phoneNumberId` ile hangi müşteriye ait olduğu bulunur
+
+**Çoklu müşteri yönlendirme:**
+- Tek webhook URL, tüm müşteriler için
+- Mesaj payload'undaki `entry[0].changes[0].value.metadata.phone_number_id` ile hesap eşleşir
+- İlgili tenant'ın AI agent'ına yönlendirilir
+
+### QR Bridge (Evolution API) — Alternatif Bağlantı
+
+Tech Provider süreci tamamlanana kadar geliştirme/test amaçlı kullanılabilir:
+
+- Her müşteri kendi WhatsApp numarasını QR kod ile bağlar
+- Evolution API (wa-bridge) aracılığıyla mesajlaşma
+- Altyapı: Docker'da `wa-bridge` konteyneri (`evoapicloud/evolution-api:v2.3.7`)
+- Sınırlamalar: WhatsApp Web protokolü, resmi API değil, rate limit yok
 
 ### Key Files
 
@@ -288,6 +418,7 @@ Host: `192.168.0.243:9000`
 | `src/app/api/whatsapp/accounts/route.ts` | CRUD accounts |
 | `src/app/api/whatsapp/accounts/[id]/route.ts` | Get/update/delete account |
 | `src/app/api/whatsapp/accounts/[id]/qr/route.ts` | QR lifecycle |
+| `src/app/api/whatsapp/accounts/[id]/register/route.ts` | Registration API (pending → active) |
 | `src/app/api/whatsapp/conversations/route.ts` | CRUD conversations |
 | `src/app/api/whatsapp/conversations/[id]/send/route.ts` | Send message |
 | `src/app/api/whatsapp/send-new/route.ts` | Send to new contact |
@@ -298,10 +429,12 @@ Host: `192.168.0.243:9000`
 | `src/app/[locale]/dashboard/whatsapp/accounts/page.tsx` | Account management UI |
 | `src/app/[locale]/dashboard/whatsapp/conversations/page.tsx` | Inbox UI |
 
-### Multi-Account Support
+### Multi-Tenant Webhook Routing
 
-- **Cloud API**: Webhook handler matches inbound messages by `phoneNumberId` from Meta payload. Falls back to first active account if no match.
-- **QR Bridge**: Webhook handler matches by `instance` field (session ID). Falls back to first active QR account if no match.
+- Tek webhook URL (`/api/webhooks/whatsapp`), tüm müşterilerin mesajları buraya gelir
+- Mesaj içindeki `phoneNumberId` ile `WhatsAppAccounts` koleksiyonundan tenant bulunur
+- Tenant'ın aktif AI agent'ına yönlendirilir
+- Yanıt, tenant'ın kendi WABA'sı üzerinden gider
 
 ## WhatsApp Improvements (Jul 2026)
 
