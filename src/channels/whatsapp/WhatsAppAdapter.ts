@@ -264,6 +264,13 @@ export class WhatsAppAdapter {
     return result;
   }
 
+  async registerNumber(pin?: string): Promise<any> {
+    return this.request('POST', `${this.config.phoneNumberId}/register`, {
+      messaging_product: 'whatsapp',
+      pin: pin || '000000',
+    });
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
       await this.request<any>('GET', `${this.config.phoneNumberId}`);

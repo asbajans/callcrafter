@@ -324,6 +324,12 @@ Host: `192.168.0.243:9000`
 ### Aşama 6 — QR Medya Mesaj Desteği
 - **`src/app/api/webhooks/whatsapp/qr/route.ts`**: Medya mesajları (image/video/audio/document/sticker) için caption veya fallback metin (`[Resim]`, `[Video]`, `[Ses]`, `[Belge]`, `[Sticker]`) kullanılır. Artık medya mesajları sessizce atlanmaz.
 
+### Aşama 7 — Registration API (Numara Kaydı)
+- **`src/channels/whatsapp/WhatsAppAdapter.ts`**: `registerNumber(pin)` metodu eklendi — Meta Registration API'yi çağırarak "pending" durumundaki numarayı kaydeder.
+- **`src/app/api/whatsapp/accounts/[id]/register/route.ts`**: POST endpoint — Cloud API hesabı için Registration API çağrısı yapar. PIN parametresi alır (default: `000000`).
+- **UI**: Cloud API hesaplarında "Numarayı Kaydet" butonu. Tıklandığında `/api/whatsapp/accounts/[id]/register` çağrılır, başarılı olursa toast ile bildirilir.
+- **Kullanım**: Meta Developer Console'da numara "pending" durumunda kalırsa bu buton ile 1 adımda kayıt tamamlanır.
+
 ## Seed Data
 - Admin: `admin@callcrafter.com` / `Admin123!`
 - 4 Pricing Plans

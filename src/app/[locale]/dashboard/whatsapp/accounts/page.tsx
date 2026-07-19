@@ -33,6 +33,7 @@ export default function WhatsAppAccountsPage() {
   const [qrLoading, setQrLoading] = useState(false);
 const [editingId, setEditingId] = useState<string | null>(null);
 const [savingId, setSavingId] = useState<string | null>(null);
+const [registeringId, setRegisteringId] = useState<string | null>(null);
 const [copiedField, setCopiedField] = useState<string | null>(null);
 const [guideOpen, setGuideOpen] = useState(false);
 
@@ -169,6 +170,25 @@ const copyToClipboard = async (text: string, field: string) => {
       setQrDialogOpen(false);
     } finally {
       setQrLoading(false);
+    }
+  };
+
+  const registerNumber = async (id: string) => {
+    setRegisteringId(id);
+    try {
+      const res = await fetch(`/api/whatsapp/accounts/${id}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: '000000' }),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Kayıt başarısız');
+      toast.success('Numara başarıyla kaydedildi!');
+      toast.info('PIN: 000000 — Meta\'da 2-adım doğrulama için kullanabilirsiniz.');
+    } catch (err: any) {
+      toast.error(err.message || 'Kayıt başarısız');
+    } finally {
+      setRegisteringId(null);
     }
   };
 
@@ -333,6 +353,21 @@ const copyToClipboard = async (text: string, field: string) => {
                         QR Bağla
                       </button>
                     )
+                  )}
+
+                  {/* Register button for Cloud API (pending numbers) */}
+                  {acc.connectionType === 'cloud_api' && acc.phoneNumberId && (
+                    <button
+                      onClick={() => registerNumber(acc.id)}
+                      disabled={registeringId === acc.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/25 transition-colors disabled:opacity-50"
+                    >
+                      {registeringId === acc.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <CheckCheck className="w-3.5 h-3.5" />
+                      }
+                      {registeringId === acc.id ? 'Kaydediliyor...' : 'Numarayı Kaydet'}
+                    </button>
                   )}
 
                   <div className="flex items-center gap-1 ml-1">
