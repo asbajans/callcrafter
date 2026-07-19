@@ -573,12 +573,10 @@ const copyToClipboard = async (text: string, field: string) => {
                       <ExternalLink className="w-4 h-4" />
                       Webhook Yapılandırması
                     </div>
-                    <p className="text-xs text-slate-400">
-                      Bu bilgileri Meta Developer Console'da webhook ayarlarında kullanacaksınız:
-                    </p>
+
                     <div className="space-y-2">
                       <div>
-                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Callback URL</label>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Callback URL (Meta'ya girilecek)</label>
                         <div className="flex items-center gap-2 mt-1">
                           <code className="flex-1 text-xs text-slate-200 bg-white/[0.06] rounded-lg px-3 py-2 font-mono break-all select-all">
                             {webhookBaseUrl}/api/webhooks/whatsapp
@@ -593,7 +591,7 @@ const copyToClipboard = async (text: string, field: string) => {
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Verify Token (aynısını Meta'ya girin)</label>
+                        <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Verify Token (Meta'ya girilecek — aynı değer)</label>
                         <div className="flex items-center gap-2 mt-1">
                           <code className={`flex-1 text-xs rounded-lg px-3 py-2 font-mono break-all ${form.webhookVerifyToken ? 'text-slate-200 bg-white/[0.06]' : 'text-slate-600 bg-white/[0.03] italic'}`}>
                             {form.webhookVerifyToken || '(önce bir token belirleyin)'}
@@ -610,12 +608,54 @@ const copyToClipboard = async (text: string, field: string) => {
                         </div>
                       </div>
                     </div>
-                    <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 text-xs text-slate-400 space-y-1">
-                      <p className="text-slate-500 font-medium mb-1">Meta Developer Console'da yapılacaklar:</p>
-                      <p>1. <strong className="text-slate-300">WhatsApp &gt; Configuration &gt; Webhook</strong> sayfasına gidin</p>
-                      <p>2. <strong className="text-slate-300">Callback URL</strong> alanına yukarıdaki URL'yi <strong className="text-indigo-300">kopyalayıp</strong> yapıştırın</p>
-                      <p>3. <strong className="text-slate-300">Verify Token</strong> alanına yukarıdaki token'ı girin</p>
-                      <p>4. <strong className="text-slate-300">Webhook fields</strong> altında <code className="text-indigo-300">messages</code> olayını seçip <strong className="text-slate-300">Subscribe</strong> butonuna tıklayın</p>
+
+                    {/* Detailed Step-by-Step Guide */}
+                    <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-3 text-xs text-slate-400 space-y-2">
+                      <p className="text-amber-300 font-semibold">⚠️ ÖNEMLİ: Webhook ayarları nerede?</p>
+                      <p>Webhook ayarları <strong className="text-slate-200">ana menüdeki "Webhooks" sayfasında DEĞİL</strong>, WhatsApp ürününün içindedir.</p>
+                    </div>
+
+                    <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-3 text-xs text-slate-400 space-y-1.5">
+                      <p className="text-slate-300 font-medium mb-1.5">AŞAĞIDAKİ ADIMLARI SIRASIYLA UYGULAYIN:</p>
+
+                      <p className="text-slate-500 font-medium mt-2">📌 Adım 1 — Developer Console'a giriş</p>
+                      <p>• <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">developers.facebook.com</a> adresine gidin</p>
+                      <p>• Sağ üstten <strong className="text-slate-300">My Apps</strong> butonuna tıklayın</p>
+                      <p>• WhatsApp eklemek için oluşturduğunuz uygulamayı seçin</p>
+
+                      <p className="text-slate-500 font-medium mt-2">📌 Adım 2 — WhatsApp ürününe girin</p>
+                      <p>• Sol menüde <strong className="text-slate-300">"WhatsApp"</strong> yazısını bulun (Products altında)</p>
+                      <p>• <strong className="text-slate-300">"WhatsApp"</strong> üzerine tıklayın</p>
+                      <p className="text-slate-500 italic">Bu adımda alt sayfalar açılır: API Setup, Configuration, etc.</p>
+
+                      <p className="text-slate-500 font-medium mt-2">📌 Adım 3 — Webhook bölümüne gidin</p>
+                      <p>• WhatsApp altında <strong className="text-slate-300">"Configuration"</strong> sekmesine tıklayın</p>
+                      <p>• Sayfanın en altına <strong className="text-slate-300">scroll edin</strong></p>
+                      <p>• <strong className="text-slate-300">"Webhook"</strong> başlığını göreceksiniz</p>
+                      <p>• Sağ taraftaki <strong className="text-slate-300">"Edit"</strong> butonuna tıklayın</p>
+
+                      <p className="text-slate-500 font-medium mt-2">📌 Adım 4 — Bilgileri girin ve kaydedin</p>
+                      <p>• <strong className="text-slate-300">Callback URL</strong> kutusuna yukarıdan kopyaladığınız URL'yi yapıştırın</p>
+                      <p className="pl-4 text-indigo-400">{webhookBaseUrl}/api/webhooks/whatsapp</p>
+                      <p>• <strong className="text-slate-300">Verify Token</strong> kutusuna yukarıdaki token'ı girin</p>
+                      <p className="pl-4 text-indigo-400">{form.webhookVerifyToken || '(önce token belirleyin)'}</p>
+                      <p>• <strong className="text-slate-300">"Verify and Save"</strong> butonuna tıklayın</p>
+                      <p>• Yeşil onay mesajı göreceksiniz: <span className="text-emerald-400">"Webhook has been verified"</span></p>
+
+                      <p className="text-slate-500 font-medium mt-2">📌 Adım 5 — Mesaj olaylarını abone olun</p>
+                      <p>• Sayfayı yenileyin (verify sonrası sayfa kaybolabilir)</p>
+                      <p>• Tekrar <strong className="text-slate-300">"Edit"</strong> butonuna tıklayın</p>
+                      <p>• Açılan pencerede <strong className="text-slate-300">"Webhook fields"</strong> bölümünü göreceksiniz</p>
+                      <p>• <code className="text-indigo-300">messages</code> yanındaki abonelik butonuna tıklayın</p>
+                      <p>• Abone olduktan sonra <strong className="text-slate-300">"Save"</strong> butonuna basın</p>
+
+                      <p className="text-amber-400 font-medium mt-2">💡 ALTERNATİF YOL (son Meta arayüzü):</p>
+                      <p>Bazı hesaplarda adımlar şöyle olabilir:</p>
+                      <p>• WhatsApp → <strong className="text-slate-300">API Setup</strong> sayfasına gidin</p>
+                      <p>• Sayfanın ortasında <strong className="text-slate-300">"Configure webhooks"</strong> butonunu bulun</p>
+                      <p>• Açılan pencerede Callback URL + Verify Token girin</p>
+                      <p>• <strong className="text-slate-300">"Manage webhook fields"</strong> bağlantısına tıklayın</p>
+                      <p>• <code className="text-indigo-300">messages</code> için abone olun</p>
                     </div>
                   </div>
                 </>
