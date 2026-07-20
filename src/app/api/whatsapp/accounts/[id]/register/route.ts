@@ -32,8 +32,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const accessToken = account.accessToken || process.env.WHATSAPP_SYSTEM_USER_TOKEN
+  const tokenSource = account.accessToken ? 'db' : 'env'
+  console.log('[Register] Token source:', tokenSource, 'phoneNumberId:', account.phoneNumberId)
+  console.log('[Register] Token prefix:', accessToken?.substring(0, 20) + '...')
+
   if (!accessToken || !account.phoneNumberId) {
     return NextResponse.json({ error: 'Account missing phoneNumberId or accessToken' }, { status: 400 })
+  }
+
+  // Test token access before registering
+  try {
+    const testRes = await fetch(`https://graph.facebook.com/v21.0/${account.phoneNumberId}?fields=id,display_phone_number,verified_name`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const testData = await testRes.json()
+    console.log('[Register] Token test result:', testRes.status, JSON.stringify(testData))
+  } catch (e: any) {
+    console.log('[Register] Token test network error:', e.message)
   }
 
   const body = await req.json().catch(() => ({}))
