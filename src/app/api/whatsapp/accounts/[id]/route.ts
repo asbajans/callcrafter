@@ -91,9 +91,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     await sql.begin(async (tx) => {
       // 1) Delete messages for conversations referencing this account
-      await tx`DELETE FROM "whatsapp_messages" WHERE "conversation" IN (SELECT "id" FROM "whatsapp_conversations" WHERE "account_id" = ${Number(id)})`
+      await tx`DELETE FROM "whatsapp_messages" WHERE "conversation" IN (SELECT "id" FROM "whatsapp_conversations" WHERE "account" = ${Number(id)})`
       // 2) Delete conversations referencing this account
-      await tx`DELETE FROM "whatsapp_conversations" WHERE "account_id" = ${Number(id)}`
+      await tx`DELETE FROM "whatsapp_conversations" WHERE "account" = ${Number(id)}`
       // 3) Delete the account itself
       await tx`DELETE FROM "whatsapp_accounts" WHERE "id" = ${Number(id)}`
     })

@@ -130,14 +130,14 @@ const copyToClipboard = async (text: string, field: string) => {
             body: JSON.stringify({ wabaId, phoneNumberId, displayPhoneNumber }),
             credentials: 'include',
           })
-            .then(r => r.json())
+            .then(async r => {
+              const result = await r.json();
+              if (!r.ok) throw new Error(result.error || 'Bağlanamadı');
+              return result;
+            })
             .then(result => {
-              if (result.error) {
-                toast.error(result.error);
-              } else {
-                toast.success('WhatsApp hesabı başarıyla bağlandı!');
-                fetchAccounts();
-              }
+              toast.success('WhatsApp hesabı başarıyla bağlandı!');
+              fetchAccounts();
             })
             .catch(err => toast.error(err.message || 'Bağlanamadı'))
             .finally(() => setEsLoading(false));
@@ -157,7 +157,14 @@ const copyToClipboard = async (text: string, field: string) => {
     setEsLoading(true);
     FB.login(
       (response: any) => {
-        if (response.authResponse?.code) {
+        if (response.status === 'unknown') {
+          toast.error('Popup engellendi veya kapatıldı');
+          setEsLoading(false);
+          return;
+        }
+        if (!response.authResponse) {
+          setEsLoading(false);
+          return;
         }
       },
       {
@@ -167,7 +174,7 @@ const copyToClipboard = async (text: string, field: string) => {
         extras: { setup: {} },
       }
     );
-    // FB.login popup kapanırsa (user closes), reset loading after timeout
+    // Reset loading after 2 min if something stalls
     setTimeout(() => {
       setEsLoading(prev => prev === true ? false : prev);
     }, 120000);
