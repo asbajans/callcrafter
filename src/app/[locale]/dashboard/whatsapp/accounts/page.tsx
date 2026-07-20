@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import {
   Plus, Pencil, Trash2, X, Loader2, AlertCircle, QrCode,
-  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink, Info, ChevronDown, MessageCircle,
+  Smartphone, RefreshCw, Wifi, WifiOff, ChevronRight, Copy, CheckCheck, ExternalLink, Info, ChevronDown, MessageCircle, Send,
 } from 'lucide-react';
 
 type WhatsAppAccount = {
@@ -38,6 +38,10 @@ const [copiedField, setCopiedField] = useState<string | null>(null);
 const [guideOpen, setGuideOpen] = useState(false);
 const [esLoading, setEsLoading] = useState(false);
 const [esConfig, setEsConfig] = useState<{ appId: string; configId: string } | null>(null);
+const [testDialogOpen, setTestDialogOpen] = useState(false);
+const [testAccountId, setTestAccountId] = useState<string | null>(null);
+const [testForm, setTestForm] = useState({ to: '', body: '' });
+const [testSending, setTestSending] = useState(false);
 
 const webhookBaseUrl = typeof window !== 'undefined'
   ? `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`
@@ -491,6 +495,17 @@ const copyToClipboard = async (text: string, field: string) => {
                     </button>
                   )}
 
+                  {/* Test Message button for Cloud API */}
+                  {acc.connectionType === 'cloud_api' && (
+                    <button
+                      onClick={() => { setTestAccountId(acc.id); setTestForm({ to: '', body: '' }); setTestDialogOpen(true); }}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Test Mesajı
+                    </button>
+                  )}
+
                   <div className="flex items-center gap-1 ml-1">
                     <button
                       onClick={() => openEdit(acc)}
@@ -791,6 +806,81 @@ const copyToClipboard = async (text: string, field: string) => {
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-indigo-600/20"
                 >
                   {editingId ? 'Güncelle' : 'Oluştur'}
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Test Message Dialog */}
+      <Dialog.Root open={testDialogOpen} onOpenChange={(open) => { setTestDialogOpen(open); if (!open) setTestAccountId(null); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 animate-in fade-in duration-200" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-white/[0.1] rounded-2xl shadow-2xl p-6 w-full max-w-md z-50 animate-in fade-in zoom-in-95 duration-200">
+            <Dialog.Close className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-200 hover:bg-white/[0.08] rounded-lg transition-colors">
+              <X className="w-4 h-4" />
+            </Dialog.Close>
+            <Dialog.Title className="text-lg font-bold text-white mb-1">Test Mesajı Gönder</Dialog.Title>
+            <Dialog.Description className="text-sm text-slate-500 mb-5">
+              WhatsApp üzerinden bir test mesajı gönderin.
+            </Dialog.Description>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Telefon Numarası <span className="text-red-400">*</span></label>
+                <input
+                  value={testForm.to}
+                  onChange={e => setTestForm({ ...testForm, to: e.target.value })}
+                  className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
+                  placeholder="905303514039 (başında + olmadan)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Mesaj <span className="text-red-400">*</span></label>
+                <textarea
+                  value={testForm.body}
+                  onChange={e => setTestForm({ ...testForm, body: e.target.value })}
+                  rows={4}
+                  className="w-full bg-white/[0.06] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors resize-none"
+                  placeholder="Mesaj içeriği..."
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Dialog.Close className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] rounded-xl transition-colors">
+                  İptal
+                </Dialog.Close>
+                <button
+                  onClick={async () => {
+                    if (!testForm.to.trim() || !testForm.body.trim() || !testAccountId) return;
+                    setTestSending(true);
+                    try {
+                      const res = await fetch('/api/whatsapp/send-new', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          accountId: testAccountId,
+                          to: testForm.to.replace(/[^0-9]/g, ''),
+                          body: testForm.body,
+                        }),
+                        credentials: 'include',
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || 'Gönderilemedi');
+                      toast.success('Mesaj gönderildi!');
+                      setTestDialogOpen(false);
+                      setTestAccountId(null);
+                    } catch (err: any) {
+                      toast.error(err.message || 'Gönderilemedi');
+                    } finally {
+                      setTestSending(false);
+                    }
+                  }}
+                  disabled={!testForm.to.trim() || !testForm.body.trim() || testSending}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {testSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {testSending ? 'Gönderiliyor...' : 'Gönder'}
                 </button>
               </div>
             </div>
