@@ -99,86 +99,91 @@ const copyToClipboard = async (text: string, field: string) => {
         appId: esConfig.appId,
         autoLogAppEvents: true,
         xfbml: true,
-        version: 'v21.0',
+        version: 'v22.0',
       });
     };
     doc.body.appendChild(script);
   }, [esConfig]);
 
-  // Listen for Embedded Signup postMessage
+  // Complete Embedded Signup via backend
+  const completeSignup = useCallback(async (wabaId: string, phoneNumberId: string, displayPhoneNumber?: string) => {
+    try {
+      const res = await fetch('/api/whatsapp/embedded-signup/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wabaId, phoneNumberId, displayPhoneNumber }),
+        credentials: 'include',
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Bağlanamadı')
+      toast.success('WhatsApp hesabı başarıyla bağlandı!')
+      fetchAccounts()
+    } catch (err: any) {
+      toast.error(err.message || 'Bağlanamadı')
+    } finally {
+      setEsLoading(false)
+    }
+  }, [])
+
+  // Listen for Embedded Signup postMessage (multi-origin)
   useEffect(() => {
+    const allowedOrigins = [
+      'https://www.facebook.com',
+      'https://facebook.com',
+      'https://www.meta.com',
+      'https://business.facebook.com',
+      'https://www.business.facebook.com',
+    ]
     const listener = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.facebook.com') return;
       try {
-        const eventData = JSON.parse(event.data);
-        if (eventData.type !== 'WA_EMBEDDED_SIGNUP') return;
+        const eventData = JSON.parse(event.data)
+        if (eventData.type !== 'WA_EMBEDDED_SIGNUP') return
         if (eventData.event === 'FINISH' || eventData.event === 'FINISH_ONLY_WABA') {
-          const data = eventData.data || {};
-          const wabaId = data.waba_id || data.wabaId || data.businessAccountId;
-          const phoneNumberId = data.phone_number_id || data.phoneNumberId;
-          const displayPhoneNumber = data.display_phone_number || data.displayPhoneNumber;
-
-          if (!wabaId || !phoneNumberId) {
-            toast.error('Eksik hesap bilgisi alındı');
-            setEsLoading(false);
-            return;
+          const data = eventData.data || {}
+          const wabaId = data.waba_id || data.wabaId || data.businessAccountId
+          const phoneNumberId = data.phone_number_id || data.phoneNumberId
+          const displayPhoneNumber = data.display_phone_number || data.displayPhoneNumber
+          if (wabaId && phoneNumberId) {
+            completeSignup(wabaId, phoneNumberId, displayPhoneNumber)
+          } else {
+            toast.error('Eksik hesap bilgisi alındı')
+            setEsLoading(false)
           }
-
-          fetch('/api/whatsapp/embedded-signup/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wabaId, phoneNumberId, displayPhoneNumber }),
-            credentials: 'include',
-          })
-            .then(async r => {
-              const result = await r.json();
-              if (!r.ok) throw new Error(result.error || 'Bağlanamadı');
-              return result;
-            })
-            .then(result => {
-              toast.success('WhatsApp hesabı başarıyla bağlandı!');
-              fetchAccounts();
-            })
-            .catch(err => toast.error(err.message || 'Bağlanamadı'))
-            .finally(() => setEsLoading(false));
         }
       } catch {}
-    };
-    window.addEventListener('message', listener);
-    return () => window.removeEventListener('message', listener);
-  }, []);
+    }
+    window.addEventListener('message', listener)
+    return () => window.removeEventListener('message', listener)
+  }, [completeSignup])
 
   const launchWhatsAppSignup = useCallback(() => {
-    const FB = (window as any).FB;
+    const FB = (window as any).FB
     if (!FB || !esConfig) {
-      toast.error('Facebook SDK henüz yüklenmedi');
-      return;
+      toast.error('Facebook SDK henüz yüklenmedi')
+      return
     }
-    setEsLoading(true);
+    setEsLoading(true)
+
     FB.login(
       (response: any) => {
         if (response.status === 'unknown') {
-          toast.error('Popup engellendi veya kapatıldı');
-          setEsLoading(false);
-          return;
+          toast.error('Popup engellendi veya kapatıldı')
         }
-        if (!response.authResponse) {
-          setEsLoading(false);
-          return;
-        }
+        // PostMessage handles the data — reset if popup closed without postMessage
+        setTimeout(() => setEsLoading(prev => prev === true ? false : prev), 5000)
       },
       {
         config_id: esConfig.configId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { setup: {} },
+        extras: {}, // v4 extras must be empty
       }
-    );
-    // Reset loading after 2 min if something stalls
+    )
+
     setTimeout(() => {
-      setEsLoading(prev => prev === true ? false : prev);
-    }, 120000);
-  }, [esConfig]);
+      setEsLoading(prev => prev === true ? false : prev)
+    }, 120000)
+  }, [esConfig, completeSignup])
 
   const resetForm = () => {
     setForm({ name: '', phoneNumberId: '', businessAccountId: '', accessToken: '', webhookVerifyToken: '', displayPhoneNumber: '', connectionType: 'cloud_api' });
